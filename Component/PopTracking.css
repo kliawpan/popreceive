@@ -1,0 +1,477 @@
+:root {
+  --primary: #4f46e5;
+  --primary-soft: #eef2ff;
+  --text-main: #1e293b;
+  --text-sub: #64748b;
+  --bg-body: #f8fafc;
+  --card-bg: #ffffff;
+  --border: #e2e8f0;
+  --radius: 16px;
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  --success-bg: #f0fdf4;
+  --success-text: #15803d;
+  --warning-soft: #fff7ed;
+  --warning-border: #fed7aa;
+  --success-soft: #dcfce7;
+  --success-border: #86efac;
+
+  /* สำคัญ: บังคับให้ Browser ใช้โหมดสว่างเสมอ ป้องกันสีเพี้ยนใน Dark Mode */
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box; /* จัดการ Padding ไม่ให้เบียดขนาดกล่อง */
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', 'Sarabun', sans-serif;
+  background-color: var(--bg-body);
+  -webkit-font-smoothing: antialiased; /* ทำให้ตัวหนังสือคมชัดบน Mac/iOS */
+}
+
+.pop-container {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  /* ปรับ Padding ให้เหมาะสมกับ Desktop */
+  padding: 50px 15px 50px; 
+  color: var(--text-main);
+  background-color: var(--bg-body);
+  min-height: 100vh;
+}
+
+/* Responsive: ปรับแต่งสำหรับมือถือ */
+@media (max-width: 600px) {
+  .pop-container {
+    padding-top: 20px; /* ลดช่องว่างด้านบนในมือถือ */
+  }
+  
+  header h1 {
+    font-size: 1.25rem; /* ลดขนาดหัวข้อไม่ให้ใหญ่เกิน */
+  }
+}
+
+header {
+  text-align: center;
+  margin-bottom: 25px;
+}
+header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 5px 0;
+  color: var(--text-main);
+}
+.subtitle {
+  color: var(--text-sub);
+  font-size: 0.9rem;
+}
+
+/* Loading Status */
+.status-wrapper {
+  display: flex;
+  justify-content: center;
+  height: 35px;
+  margin-bottom: 15px;
+}
+.loading-pill {
+  background: #fff;
+  padding: 4px 12px;
+  border-radius: 30px;
+  box-shadow: var(--shadow);
+  font-size: 0.8rem;
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+.loading-pill.ready {
+  background-color: #ecfdf5;
+  color: #059669;
+}
+.loading-pill.error {
+  background-color: #fef2f2;
+  color: #dc2626;
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+}
+
+/* Controls Card */
+.controls-card {
+  background: var(--card-bg);
+  padding: 20px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  align-items: end;
+}
+
+@media (max-width: 768px) {
+  .controls-card {
+    grid-template-columns: 1fr; /* เรียงเป็นแนวตั้งในมือถือ */
+    gap: 15px;
+  }
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-main);
+}
+.required {
+  color: #ef4444;
+  margin-left: 4px;
+}
+
+/* Input Styling */
+select,
+input[type="date"],
+textarea {
+  width: 100%;
+  padding: 12px; /* เพิ่มพื้นที่กดให้ง่ายขึ้นบนจอสัมผัส */
+  font-family: inherit;
+  
+  /* สำคัญ: ใช้ 16px หรือ 1rem เพื่อป้องกัน iOS Zoom */
+  font-size: 1rem; 
+  
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background-color: #f8fafc; /* ใช้ background-color ชัดเจน */
+  color: #1e293b; /* บังคับสีตัวอักษรให้เข้ม */
+  appearance: none;
+  -webkit-appearance: none; /* สำหรับ Safari/iOS */
+}
+
+select:focus,
+input:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  background-color: #fff;
+  box-shadow: 0 0 0 3px var(--primary-soft); /* เพิ่ม Focus ring ให้เห็นชัด */
+}
+
+/* Progress Bar */
+.progress-section {
+  margin-bottom: 20px;
+}
+.progress-container {
+  width: 100%;
+  height: 6px; /* หนาขึ้นเล็กน้อยให้ดูง่าย */
+  background: #e2e8f0;
+  margin-top: 8px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  background: #22c55e;
+  width: 0%;
+  transition: width 0.3s ease;
+  border-radius: 10px;
+}
+
+/* Result Card */
+.result-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin-bottom: 25px;
+}
+.result-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fff;
+  flex-wrap: wrap; /* ให้ตกบรรทัดได้ถ้ายาวเกิน */
+  gap: 10px;
+}
+.branch-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+.total-badge {
+  background: var(--text-main);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+}
+
+/* Table Responsive */
+.table-container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch; /* เลื่อนลื่นบน iOS */
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+th {
+  text-align: left;
+  padding: 12px 15px;
+  font-size: 0.75rem;
+  color: var(--text-sub);
+  background: #f8fafc;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+td {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+  vertical-align: middle;
+  color: var(--text-main);
+}
+tr {
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+/* Hover effect only on devices that support hover (Desktop) */
+@media (hover: hover) {
+  tr:hover td {
+    background-color: #f8fafc;
+  }
+}
+
+/* Checked State */
+tr.checked-row td {
+  background-color: var(--success-bg);
+  color: var(--text-sub);
+}
+tr.checked-row .qty-pill {
+  opacity: 0.5;
+  filter: grayscale(100%);
+}
+tr.checked-row .item-name {
+  text-decoration: line-through;
+  color: var(--success-text);
+}
+
+.qty-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px; /* เพิ่มขนาดเล็กน้อยให้อ่านง่าย */
+  height: 32px;
+  border-radius: 50%;
+  font-size: 0.85rem;
+  background-color: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 700;
+}
+.custom-checkbox {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+/* Report Section */
+.report-section {
+  border-radius: var(--radius);
+  padding: 20px;
+  transition: all 0.3s ease;
+}
+.mode-incomplete {
+  background: var(--warning-soft);
+  border: 1px solid var(--warning-border);
+}
+.mode-incomplete .report-header {
+  color: #c2410c;
+}
+.mode-incomplete .btn-submit {
+  background: #ea580c;
+}
+.mode-complete {
+  background: var(--success-soft);
+  border: 1px solid var(--success-border);
+}
+.mode-complete .report-header {
+  color: #15803d;
+}
+.mode-complete .btn-submit {
+  background: #16a34a;
+}
+
+.report-header {
+  font-weight: 700;
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* จัดให้ปุ่มอยู่ขวาสุด */
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.report-grid {
+  display: grid;
+  gap: 15px;
+}
+
+/* Upload & Preview */
+.upload-box {
+  border: 2px dashed #fdba74;
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  background: #fff;
+  position: relative;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+}
+.mode-complete .upload-box {
+  border-color: #86efac;
+}
+
+.upload-input {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); /* ปรับขนาดพรีวิวให้พอดีนิ้ว */
+  gap: 10px;
+  margin-top: 15px;
+}
+.preview-item {
+  position: relative;
+  width: 100%;
+  padding-top: 100%; /* Square aspect ratio */
+}
+.preview-media {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #fed7aa;
+}
+.delete-btn {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #ef4444;
+  color: white;
+  border-radius: 50%;
+  width: 24px; /* ใหญ่ขึ้นกดง่ายขึ้น */
+  height: 24px;
+  text-align: center;
+  line-height: 22px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  z-index: 2;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.btn-submit {
+  width: 100%;
+  color: white;
+  border: none;
+  padding: 14px; /* ปุ่มใหญ่ขึ้น */
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity 0.2s;
+}
+.btn-submit:active {
+  opacity: 0.8;
+}
+
+.defect-toggle-btn {
+  background: #fff;
+  border: 1px solid #fed7aa;
+  color: #c2410c;
+  font-size: 0.85rem;
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.defect-toggle-btn.active {
+  background: #ef4444;
+  color: white;
+  border-color: #ef4444;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-sub);
+}
+.alert-date {
+  color: #ef4444;
+  font-size: 0.75rem;
+  margin-top: 5px;
+  font-weight: 500;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.95);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(2px); /* เพิ่มความสวยงาม */
+}
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #ea580c;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
