@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'react';
-import { useReactToPrint } from 'react-to-print';
+import React, { useState, useEffect, useMemo, useRef, type ChangeEvent, use } from 'react';
+// import { useReactToPrint } from 'react-to-print';
 import './PopTracking.css';
-
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import html2pdf from 'html2pdf.js';
 // --- Type Definitions ---
 interface InventoryItem {
     id: string;
@@ -48,7 +50,7 @@ type LoadingStatus = 'loading' | 'ready' | 'error';
 type AppMode = 'entry' | 'history';
 
 
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxNvAsELdot05k3EY4Mk4jBOdM79vHmXcDjsi4AdBgztQDqC-hdw0e8prDEduCv5oDX/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxbjOMIR_MzIajinfLutQWYMeyD5jSW6t1EjBp_eiCTYcJEEZSYhmn4jjkhg6H7VTMB/exec";
 
 const SHEET_URLS = {
     brand: "https://docs.google.com/spreadsheets/d/1f4jzIQd2wdIAMclsY4vRw04SScm5xUYN0bdOz8Rn4Pk/export?format=csv&gid=577319442",
@@ -67,7 +69,7 @@ const PopTracking: React.FC = () => {
     const [selectedBranch, setSelectedBranch] = useState<string>('');
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [selectedDate, setSelectedDate] = useState<string>('');
-
+const [endDate, setEnfDate] = useState<string>('');
   
     const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
     const [reportNote, setReportNote] = useState<string>('');
@@ -191,10 +193,10 @@ const PopTracking: React.FC = () => {
     };
 
 
-// --- 🔧 ฟังก์ชันย่อรูปภาพ (แก้ไขแล้ว) ---
+
     const compressImage = async (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
-            // 1. ถ้าเป็นวิดีโอ ไม่ต้องย่อ ให้ส่งค่าเดิมกลับไปเลย
+      
             if (file.type.includes('video')) {
                 const reader = new FileReader();
                 reader.readAsDataURL(file);
@@ -203,7 +205,7 @@ const PopTracking: React.FC = () => {
                 return;
             }
 
-            // 2. ถ้าเป็นรูปภาพ ให้ทำการย่อ
+           
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = (event) => {
@@ -213,10 +215,10 @@ const PopTracking: React.FC = () => {
                 }
                 
                 img.onload = () => {
-                    // ⚠️ บรรทัดนี้สำคัญมาก ต้องประกาศตัวแปร canvas ตรงนี้
+                   
                     const canvas: HTMLCanvasElement = document.createElement('canvas');
                     
-                    const maxWidth = 1000; // กำหนดความกว้างสูงสุด
+                    const maxWidth = 1000; 
                     const scaleSize = maxWidth / img.width;
                     const newWidth = (img.width > maxWidth) ? maxWidth : img.width;
                     const newHeight = (img.width > maxWidth) ? (img.height * scaleSize) : img.height;
@@ -228,7 +230,7 @@ const PopTracking: React.FC = () => {
                     if (ctx) {
                         ctx.drawImage(img, 0, 0, newWidth, newHeight);
                         
-                        // แปลงเป็น JPEG คุณภาพ 0.7 (70%)
+                        
                         const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
                         resolve(compressedDataUrl);
                     } else {
@@ -272,16 +274,47 @@ const PopTracking: React.FC = () => {
             isComplete: checkedCount === total
         };
     }, [filteredData, checkedItems]);
-
-   
-    const handleToggleCheck = (id: string) => {
+const handleToggleCheck = (id: string) => {
         if (!selectedDate) return alert('⚠️ กรุณาระบุวันที่ได้รับ POP');
+        
         setCheckedItems(prev => {
-            const newState = { ...prev, [id]: !prev[id] };
-            if (newState[id]) localStorage.setItem('pop_check_' + id, 'true');
-            else localStorage.removeItem('pop_check_' + id);
+            const isCurrentlyChecked = !!prev[id];
+            const newState = { ...prev };
+            
+            if (isCurrentlyChecked) {
+                delete newState[id]; 
+                localStorage.removeItem('pop_check_' + id);
+            } else {
+                newState[id] = true;
+                localStorage.setItem('pop_check_' + id, 'true');
+            }
             return newState;
         });
+    };
+   const isAllSelected = filteredData.length > 0 && filteredData.every(item => checkedItems[item.id]);
+
+    const handleSelectAll = () => {
+        if (!selectedDate) return alert('⚠️ กรุณาระบุวันที่ได้รับ POP');
+
+        const newCheckedState = {...checkedItems};
+        if(isAllSelected) {
+            filteredData.forEach(item => {
+                delete newCheckedState[item.id];
+                localStorage.removeItem('pop_check_' + item.id);
+            });
+        } else {
+            filteredData.forEach(item => {
+                newCheckedState[item.id] = true;
+                localStorage.setItem('pop_check_' + item.id, 'true');
+            });
+        }
+        setCheckedItems(newCheckedState);
+        // setCheckedItems(prev => {
+        //     const newState = { ...prev, [id]: !prev[id] };
+        //     if (newState[id]) localStorage.setItem('pop_check_' + id, 'true');
+        //     else localStorage.removeItem('pop_check_' + id);
+        //     return newState;
+        // });
     };
 
  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
@@ -340,7 +373,7 @@ const PopTracking: React.FC = () => {
 
         const allBranchItems = database.filter(d => d.branch === selectedBranch);
         
-        // 1. สร้าง Snapshot ข้อมูล
+      
         const itemsSnapshot: SnapshotItem[] = allBranchItems.map(item => ({
             id: item.id,
             item: item.item,
@@ -349,6 +382,7 @@ const PopTracking: React.FC = () => {
             isChecked: !!checkedItems[item.id]
         }));
 
+        const isAllMissing = itemsSnapshot.length > 0 && itemsSnapshot.every(item => !item.isChecked);
       
         const missingList = itemsSnapshot
             .filter(item => !item.isChecked)
@@ -357,7 +391,14 @@ const PopTracking: React.FC = () => {
         const isMissing = missingList.length > 0;
         const missingString = isMissing ? missingList.join("\n") : "-";
 
-        if (isMissing && !reportNote && selectedFiles.length === 0) {
+
+if (isAllMissing){
+    if (!reportNote){
+        return alert("⚠️ คุณยังไม่ได้เลือกรับรายการใดๆ เลย\n\nกรุณาระบุเหตุผลในช่อง 'รายละเอียดปัญหา' ก่อนกดส่ง\n");
+    }
+}
+
+     else if (isMissing && !reportNote && selectedFiles.length === 0) {
             return alert("⚠️ POP ไม่ครบ: กรุณาระบุรายละเอียด หรือแนบรูปภาพ");
         } else if (isDefectMode) {
             if (!reportNote) return alert("⚠️ แจ้งชำรุด: กรุณาระบุรายละเอียด");
@@ -372,7 +413,11 @@ const PopTracking: React.FC = () => {
           const mediaBase64 = await Promise.all(selectedFiles.map(file => compressImage(file)));
             
             let finalNote = reportNote;
-            if (!isMissing && !isDefectMode) finalNote = "Received All POP Items Successfully.";
+
+            if (isAllMissing) {
+                finalNote = reportNote;
+            }
+           else if (!isMissing && !isDefectMode) finalNote = "Received All POP Items Successfully.";
 
             const payload: SubmitPayload = {
                 branch: selectedBranch,
@@ -392,7 +437,9 @@ const PopTracking: React.FC = () => {
 
             // Alert Message
             let msg = "";
-            if (isMissing) {
+            if(isAllMissing){
+                msg=`⚠️ บันทึกข้อมูลแล้ว ยังไม่ได้รับ POP\nเหตุผล: ${reportNote}`;
+            } else if (isMissing) {
                 msg = `⚠️ บันทึกข้อมูลแล้ว (POP ที่ยังไม่ได้รับ ${missingList.length} รายการ):\n\n`;
                 msg += missingList.join("\n");
                 msg += `\n\n================\nระบบได้แจ้งเตือนฝ่ายที่เกี่ยวข้องแล้ว`;
@@ -448,10 +495,45 @@ const PopTracking: React.FC = () => {
     };
 
     // --- PRINT PDF ---
-    const handlePrint = useReactToPrint({
-        contentRef: componentRef,
-        documentTitle: `POP_Report_${selectedBranch}_${selectedDate}`,
+    // const handlePrint = useReactToPrint({
+    //     contentRef: componentRef,
+    //     documentTitle: `POP_Report_${selectedBranch}_${selectedDate}`,
+    // });
+
+
+// --- DOWNLOAD PDF FUNCTION ---
+   const handleDownloadPDF = () => {
+        const element = componentRef.current;
+        if (!element) return;
+        
+        setIsSubmitting(true);
+const elementsToHide = element.querySelectorAll('.hide-on-pdf');
+const originalStyles: string[] = [];
+    elementsToHide.forEach((el) => {
+         const htmlEl = el as HTMLElement;
+         originalStyles.push(htmlEl.style.display);
+         htmlEl.style.display = 'none'; // ซ่อนชั่วคราว
     });
+        const opt = {
+            margin:       10, 
+            filename:     `POP_Report_${selectedBranch}_${selectedDate}.pdf`,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2 },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+  (import('html2pdf.js') as any).then((html2pdf: any) => {
+         html2pdf.default().set(opt).from(element).save().then(() => {
+ 
+             elementsToHide.forEach((el, index) => {
+                 (el as HTMLElement).style.display = originalStyles[index];
+             });
+             setIsSubmitting(false);
+         });
+        
+    });
+};
+
 
     // --- Logic UI ---
     const isComplete = progress.isComplete;
@@ -483,7 +565,7 @@ const PopTracking: React.FC = () => {
 
             <header>
                 <h1>POP Receive Tracking Order System</h1>
-                {/* <div className="subtitle">ระบบรับ POP</div> */}
+       
 
                
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginTop: 20 }}>
@@ -525,9 +607,10 @@ const PopTracking: React.FC = () => {
             </div>
 
    
-            <div className="controls-card">
+          <div className="controls-card">
+            
                 <div className="input-group">
-                    <label>เลือกสาขา (Branch)</label>
+                    <label>1. เลือกสาขา (Branch)</label>
                     <select 
                         value={selectedBranch} 
                         onChange={(e) => setSelectedBranch(e.target.value)}
@@ -538,9 +621,11 @@ const PopTracking: React.FC = () => {
                     </select>
                 </div>
 
+               
                 {mode === 'entry' ? (
+                   
                     <div className="input-group">
-                        <label>หมวดหมู่ (Category)</label>
+                        <label>2. หมวดหมู่ (Category)</label>
                         <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
                             <option value="all">แสดงทั้งหมด (All)</option>
                             <option value="RE-Brand">RE-Brand</option>
@@ -549,6 +634,22 @@ const PopTracking: React.FC = () => {
                         </select>
                     </div>
                 ) : (
+                
+                    <div className="input-group">
+                        <label>2. วันที่ (Date) <span className="required">*</span></label>
+                        <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
+                    </div>
+                )}
+
+          
+                {mode === 'entry' ? (
+             
+                    <div className="input-group">
+                        <label>3. วันที่ (Date) <span className="required">*</span></label>
+                        <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
+                    </div>
+                ) : (
+             
                     <div className="input-group" style={{display: 'flex', alignItems: 'end'}}>
                         <button 
                             onClick={handleSearchHistory} 
@@ -562,11 +663,6 @@ const PopTracking: React.FC = () => {
                         </button>
                     </div>
                 )}
-
-                <div className="input-group">
-                    <label>วันที่ (Date) <span className="required">*</span></label>
-                    <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
-                </div>
             </div>
 
            
@@ -593,13 +689,26 @@ const PopTracking: React.FC = () => {
                                     <tr>
                                         <th style={{ width: 50 }}>หมวด</th>
                                         <th>รายการ</th>
+                                        
                                         <th style={{ width: 40, textAlign: 'center' }}>จำนวน</th>
-                                        <th style={{ width: 40, textAlign: 'center' }}>รับแล้ว</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredData.map(row => {
-                                        const isChecked = !!checkedItems[row.id];
+
+                                        <th style={{width:60, textAlign: 'center' }}>
+                                <div style={{display:'flex', flexDirection:'column', alignItems:'center',gap:2}}>
+                                    <span style={{fontSize: '0.6rem'}}>รับแล้ว</span>
+                                    <input 
+                                        type="checkbox" 
+                                        className="custom-checkbox header-checkbox"
+                                        checked={isAllSelected}
+                                        onChange={handleSelectAll}
+                                        disabled={!selectedDate || filteredData.length === 0}
+                                    />
+                                </div>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {filteredData.map(row => {
+                            const isChecked = !!checkedItems[row.id];
                                         return (
                                             <tr key={row.id} className={isChecked ? 'checked-row' : ''} onClick={() => handleToggleCheck(row.id)}>
                                                 <td><span style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#f1f5f9', borderRadius: 4, color: '#64748b' }}>{row.category.replace('RE-', '').replace('Special-', '')}</span></td>
@@ -679,12 +788,12 @@ const PopTracking: React.FC = () => {
                     {historyData && (
                         <div>
                             <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'flex-end' }}>
-                                <button onClick={handlePrint} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <button onClick={handleDownloadPDF} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 5 }}>
                                     🖨️ Export PDF / Print
                                 </button>
                             </div>
 
-                            {/* --- Printable Area --- */}
+                          
                             <div ref={componentRef} style={{ padding: 40, background: 'white', color: '#000' }}>
                                 <div style={{textAlign: 'center', marginBottom: 20, borderBottom: '2px solid #eee', paddingBottom: 10}}>
                                     <h2 style={{ margin: 0 }}>POP Receive Tracking Order</h2>
@@ -725,7 +834,7 @@ const PopTracking: React.FC = () => {
                                 </table>
 
                                 {historyData.missing && historyData.missing !== "-" && (
-                                    <div style={{ marginTop: 20, padding: 15, border: '1px solid #fca5a5', background: '#fef2f2', borderRadius: 8 }}>
+                                    <div className="hide-on-pdf" style={{ marginTop: 20, padding: 15, border: '1px solid #fca5a5', background: '#fef2f2', borderRadius: 8 }}>
                                         <h4 style={{ margin: '0 0 10px 0', color: '#b91c1c' }}>⚠️ รายการที่ยังไม่ได้รับ / แจ้งปัญหา:</h4>
                                         <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'Sarabun, sans-serif', margin: 0, fontSize: '0.9rem' }}>{historyData.missing}</pre>
                                     </div>
@@ -736,9 +845,9 @@ const PopTracking: React.FC = () => {
                                 </div>
 
                                 <div style={{ marginTop: 50, textAlign: 'center', paddingTop: 20 }}>
-                                    <div style={{ borderTop: '1px solid #ddd', display: 'inline-block', paddingTop: 10, width: 200 }}>
+                                    {/* <div style={{ borderTop: '1px solid #ddd', display: 'inline-block', paddingTop: 10, width: 200 }}>
                                         ลงชื่อผู้ตรวจสอบ
-                                    </div>
+                                    </div> */}
                                     <div style={{ fontSize: '0.8rem', color: '#999', marginTop: 5 }}>
                                         (บันทึกอัตโนมัติเมื่อ {historyData.date})
                                     </div>
