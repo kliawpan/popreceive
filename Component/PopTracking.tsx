@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'react';
-// import { useReactToPrint } from 'react-to-print';
 import './PopTracking.css';
 
 // --- Type Definitions ---
@@ -60,29 +59,22 @@ const SHEET_URLS = {
 const SkeletonLoader = () => {
     return (
         <div className="animate-pulse" style={{ marginTop: 20 }}>
-            {/* ส่วน Controls (เลียนแบบช่องเลือกสาขา) */}
             <div className="skeleton-controls">
                 <div className="skeleton skeleton-input"></div>
                 <div className="skeleton skeleton-input"></div>
                 <div className="skeleton skeleton-input"></div>
             </div>
-
-            {/* ส่วน Progress Bar จำลอง */}
             <div style={{ marginBottom: 20 }}>
                 <div className="skeleton" style={{ height: 20, width: '100%', borderRadius: 10 }}></div>
             </div>
-
-            {/* ส่วนตารางรายการ */}
             <div className="skeleton-card">
                 <div className="skeleton skeleton-header"></div>
-                
-                {/* จำลองรายการ 6 บรรทัด */}
                 {[...Array(6)].map((_, i) => (
                     <div key={i} className="skeleton-row">
-                        <div className="skeleton skeleton-col" style={{ width: '15%' }}></div> {/* หมวด */}
-                        <div className="skeleton skeleton-col" style={{ width: '60%' }}></div> {/* ชื่อรายการ */}
-                        <div className="skeleton skeleton-col" style={{ width: '10%' }}></div> {/* จำนวน */}
-                        <div className="skeleton skeleton-col" style={{ width: '15%' }}></div> {/* Checkbox */}
+                        <div className="skeleton skeleton-col" style={{ width: '15%' }}></div>
+                        <div className="skeleton skeleton-col" style={{ width: '60%' }}></div>
+                        <div className="skeleton skeleton-col" style={{ width: '10%' }}></div>
+                        <div className="skeleton skeleton-col" style={{ width: '15%' }}></div>
                     </div>
                 ))}
             </div>
@@ -96,7 +88,6 @@ const PopTracking: React.FC = () => {
     const [branches, setBranches] = useState<string[]>([]);
     const [loadingStatus, setLoadingStatus] = useState<LoadingStatus>('loading');
 
- 
     const [mode, setMode] = useState<AppMode>('entry');
     const [selectedBranch, setSelectedBranch] = useState<string>('');
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -108,10 +99,8 @@ const PopTracking: React.FC = () => {
     const [isDefectMode, setIsDefectMode] = useState<boolean>(false);
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-    
     const [historyData, setHistoryData] = useState<HistoryRecord | null>(null);
     const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-    
 
     const componentRef = useRef<HTMLDivElement>(null);
     
@@ -119,7 +108,6 @@ const PopTracking: React.FC = () => {
         const today = new Date().toISOString().split('T')[0];
         setSelectedDate(today);
 
-       
         const savedChecks: Record<string, boolean> = {};
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
@@ -130,8 +118,6 @@ const PopTracking: React.FC = () => {
         }
         setCheckedItems(savedChecks);
 
-
-        
         const loadAllData = async () => {
             try {
                 const [brandData, systemData, specialData] = await Promise.all([
@@ -167,7 +153,6 @@ const PopTracking: React.FC = () => {
 
         loadAllData();
     }, []);
-
 
     const fetchData = async (url: string): Promise<string> => {
         const response = await fetch(url);
@@ -224,11 +209,8 @@ const PopTracking: React.FC = () => {
         return parsedData;
     };
 
-
-    // --- 🔧 Image Compression Function ---
     const compressImage = async (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
-            // 1. If video, skip compression and return original.
             if (file.type.includes('video')) {
                 const reader = new FileReader();
                 reader.readAsDataURL(file);
@@ -237,7 +219,6 @@ const PopTracking: React.FC = () => {
                 return;
             }
 
-            // 2. If image, compress it.
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = (event) => {
@@ -247,10 +228,9 @@ const PopTracking: React.FC = () => {
                 }
                 
                 img.onload = () => {
-                    // ⚠️ Important: Declare canvas variable here
                     const canvas: HTMLCanvasElement = document.createElement('canvas');
                     
-                    const maxWidth = 1000; // Set max width
+                    const maxWidth = 1000;
                     const scaleSize = maxWidth / img.width;
                     const newWidth = (img.width > maxWidth) ? maxWidth : img.width;
                     const newHeight = (img.width > maxWidth) ? (img.height * scaleSize) : img.height;
@@ -261,22 +241,17 @@ const PopTracking: React.FC = () => {
                     const ctx = canvas.getContext('2d');
                     if (ctx) {
                         ctx.drawImage(img, 0, 0, newWidth, newHeight);
-                        
-                        // Convert to JPEG with 0.7 (70%) quality
                         const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
                         resolve(compressedDataUrl);
                     } else {
                         reject(new Error("Cannot get canvas context"));
                     }
                 };
-                
                 img.onerror = (error) => reject(error);
             };
-            
             reader.onerror = (error) => reject(error);
         });
     };
-
 
     const filteredData = useMemo<InventoryItem[]>(() => {
         if (!selectedBranch) return [];
@@ -305,7 +280,6 @@ const PopTracking: React.FC = () => {
         setCheckedItems(prev => {
             const isCurrentlyChecked = !!prev[id];
             const newState = { ...prev };
-            
             if (isCurrentlyChecked) {
                 delete newState[id]; 
                 localStorage.removeItem('pop_check_' + id);
@@ -337,7 +311,7 @@ const PopTracking: React.FC = () => {
         setCheckedItems(newCheckedState);
     };
 
- const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
         const files = event.target.files;
         if (!files) return;
         
@@ -353,12 +327,10 @@ const PopTracking: React.FC = () => {
             return true;
         });
 
-      
         if (validSizeFiles.length === 0) {
             event.target.value = '';
             return;
         }
-
 
         const uniqueNewFiles = validSizeFiles.filter(newFile => 
             !selectedFiles.some(existingFile => 
@@ -372,7 +344,6 @@ const PopTracking: React.FC = () => {
              return;
         }
 
-     
         if (selectedFiles.length + uniqueNewFiles.length > 10) {
              alert('Cannot attach more than 10 files');
              event.target.value = '';
@@ -386,14 +357,12 @@ const PopTracking: React.FC = () => {
         setSelectedFiles(prev => prev.filter((_, i) => i !== index));
     };
 
-   
     const handleSubmit = async () => {
         if (!selectedBranch) return alert("Please select a branch");
         if (!selectedDate) return alert("Please select a date");
 
         const allBranchItems = database.filter(d => d.branch === selectedBranch);
         
-      
         const itemsSnapshot: SnapshotItem[] = allBranchItems.map(item => ({
             id: item.id,
             item: item.item,
@@ -411,13 +380,11 @@ const PopTracking: React.FC = () => {
         const isMissing = missingList.length > 0;
         const missingString = isMissing ? missingList.join("\n") : "-";
 
-
         if (isAllMissing){
             if (!reportNote){
                 return alert("⚠️ You haven't selected any received items.\n\nPlease specify the reason in the 'Issue Details' box before submitting.\n");
             }
         }
-
         else if (isMissing && !reportNote && selectedFiles.length === 0) {
             return alert("⚠️ Missing POP: Please provide details or attach images");
         } else if (isDefectMode) {
@@ -489,7 +456,6 @@ const PopTracking: React.FC = () => {
         }
     };
 
-    // --- SEARCH HISTORY ---
     const handleSearchHistory = async () => {
         if (!selectedBranch || !selectedDate) return alert("Please select branch and date before searching");
         setIsHistoryLoading(true);
@@ -501,7 +467,6 @@ const PopTracking: React.FC = () => {
             const data = await res.json();
 
             if (data && data.length > 0) {
-                
                 setHistoryData(data[data.length - 1]); 
             } else {
                 alert("No record found for today");
@@ -514,14 +479,6 @@ const PopTracking: React.FC = () => {
         }
     };
 
-    // --- PRINT PDF ---
-    // const handlePrint = useReactToPrint({
-    //     contentRef: componentRef,
-    //     documentTitle: `POP_Report_${selectedBranch}_${selectedDate}`,
-    // });
-
-
-// --- DOWNLOAD PDF FUNCTION ---
    const handleDownloadPDF = () => {
         const element = componentRef.current;
         if (!element) return;
@@ -550,12 +507,9 @@ const PopTracking: React.FC = () => {
                     });
                     setIsSubmitting(false);
                 });
-                
             });
     };
 
-
-    // --- Logic UI ---
     const isComplete = progress.isComplete;
     let reportClass = 'mode-incomplete';
     let reportIcon = '📝';
@@ -585,9 +539,6 @@ const PopTracking: React.FC = () => {
 
             <header>
                 <h1>POP Receive Tracking Order System</h1>
-       
-
-               
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginTop: 20 }}>
                     <button 
                         onClick={() => setMode('entry')}
@@ -704,9 +655,7 @@ const PopTracking: React.FC = () => {
                                             <tr>
                                                 <th style={{ width: 50 }}>Category</th>
                                                 <th>Item</th>
-                                                
                                                 <th style={{ width: 40, textAlign: 'center' }}>Qty</th>
-
                                                 <th style={{width:60, textAlign: 'center' }}>
                                                     <div style={{display:'flex', flexDirection:'column', alignItems:'center',gap:2}}>
                                                         <span style={{fontSize: '0.6rem'}}>Received</span>
@@ -726,7 +675,10 @@ const PopTracking: React.FC = () => {
                                                 const isChecked = !!checkedItems[row.id];
                                                 return (
                                                     <tr key={row.id} className={isChecked ? 'checked-row' : ''} onClick={() => handleToggleCheck(row.id)}>
-                                                        <td><span style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#f1f5f9', borderRadius: 4, color: '#64748b' }}>{row.category.replace('RE-', '').replace('Special-', '')}</span></td>
+                                                        <td><span style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#f1f5f9', borderRadius: 4, color: '#64748b' }}>
+                                                            {/* 👇 แก้ไขตรงนี้ให้แสดง Category ถูกต้อง */}
+                                                            {row.category.replace('RE-', '').replace('-POP', '')}
+                                                        </span></td>
                                                         <td className="item-name" style={{ color: '#334155', whiteSpace: 'normal', pointerEvents: 'none' }}>{row.item}</td>
                                                         <td style={{ textAlign: 'center', pointerEvents: 'none' }}><span className="qty-pill">{row.qty}</span></td>
                                                         <td style={{ textAlign: 'center' }}>
@@ -859,9 +811,6 @@ const PopTracking: React.FC = () => {
                                         </div>
 
                                         <div style={{ marginTop: 50, textAlign: 'center', paddingTop: 20 }}>
-                                            {/* <div style={{ borderTop: '1px solid #ddd', display: 'inline-block', paddingTop: 10, width: 200 }}>
-                                                Signature
-                                            </div> */}
                                             <div style={{ fontSize: '0.8rem', color: '#999', marginTop: 5 }}>
                                                 (Auto-saved on {historyData.date})
                                             </div>
@@ -874,7 +823,6 @@ const PopTracking: React.FC = () => {
                 </>
             )}
 
-            {/* Empty States */}
             {mode === 'entry' && !selectedBranch && (
                 <div className="empty-state">
                     <span>👈</span>
