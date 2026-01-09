@@ -2,23 +2,18 @@ import React, { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'r
 import './PopTracking.css';
 import AdminPanel from './AdminPanel'; 
 import HistoryPanel from './HistoryPanel'; 
-import {
-  normalizeBranchKey,
-  resolveCanonicalBranch
-} from './utils/branchResolver';
-
 
 // --- Type Definitions ---
 interface InventoryItem { id: string; branch: string; branchKey: string;  category: string; item: string; qty: number; }
 interface SnapshotItem { id: string; item: string; qty: number; category: string; isChecked: boolean; }
 interface ProgressStats { count: number; total: number; percent: number; isComplete: boolean; }
-interface SubmitPayload { branch: string; trackingNo: string; category: string; date: string; note: string; images: string[]; missingItems: string; itemsSnapshot: SnapshotItem[]; }
+interface SubmitPayload { branch: string; trackingNo: string; date: string; note: string; images: string[]; missingItems: string; itemsSnapshot: SnapshotItem[]; }
 interface TrackingInfo { number: string; type: 'POP' | 'Equipment'; }
 
 type LoadingStatus = 'loading' | 'ready' | 'error';
 type AppMode = 'entry' | 'history' | 'admin';
 
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwZGVUS5zAHrA07rrABvY2wemdqbnt0_tmKMxXPVaVL9LIvuz4X4YjYpCowuFXTsqOp/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxiqI2_uyNaMcgs5o1vM0rZXAWssK3tQ48E4IWOmZwuqa_wINJCAtWQ-ZSAUvi3aAuj/exec";
 
 const SHEET_URLS = {
     brand: "https://docs.google.com/spreadsheets/d/1f4jzIQd2wdIAMclsY4vRw04SScm5xUYN0bdOz8Rn4Pk/export?format=csv&gid=577319442",
@@ -27,7 +22,10 @@ const SHEET_URLS = {
     tracking: "https://docs.google.com/spreadsheets/d/1f4jzIQd2wdIAMclsY4vRw04SScm5xUYN0bdOz8Rn4Pk/export?format=csv&gid=1495482850",
     equipment: "https://docs.google.com/spreadsheets/d/1f4jzIQd2wdIAMclsY4vRw04SScm5xUYN0bdOz8Rn4Pk/export?format=csv&gid=288598451"
 };
-
+const normalizeBranchKey = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0E00-\u0E7F]/g, '');
 
 const SkeletonLoader = () => {
     return (
@@ -99,7 +97,6 @@ const PopTracking: React.FC = () => {
                 parseData(systemData, "RE-System"); 
                 parseData(specialData, "Special-POP");
                 
-                
            
                 const equipmentItems = parseEquipmentCSV(equipmentData, "Equipment-Order", allBranches);
                 allData = [...allData, ...equipmentItems];
@@ -157,6 +154,35 @@ const PopTracking: React.FC = () => {
 
     const fetchData = async (url: string): Promise<string> => { const response = await fetch(url); if (!response.ok) throw new Error("Network error"); return await response.text(); };
     
+   
+    const findBestMatchBranch = (rawName: string, existingBranches: Set<string>): string => {
+        if (!rawName) return rawName;
+
+        const cleanRaw = rawName.toLowerCase().replace(/[^a-z0-9\u0E00-\u0E7F]/g, ""); 
+        
+        for (const branch of existingBranches) {
+            const cleanBranch = branch.toLowerCase().replace(/[^a-z0-9\u0E00-\u0E7F]/g, "");
+            if (cleanRaw === cleanBranch) return branch;
+        }
+
+   
+        for (const branch of existingBranches) {
+            const cleanBranch = branch.toLowerCase().replace(/[^a-z0-9\u0E00-\u0E7F]/g, "");
+
+            if (cleanRaw.length > 5 && cleanBranch.includes(cleanRaw)) {
+                return branch;
+            }
+        }
+
+        if (rawName.includes("Chiangmai") && !rawName.includes("Festival")) {
+            const match = Array.from(existingBranches).find(b => b.includes("Chiangmai") && b.includes("Festival"));
+            if (match) return match;
+        }
+
+
+        return rawName; 
+    };
+
 const parseEquipmentCSV = (
   csvText: string,
   categoryName: string,
@@ -164,108 +190,65 @@ const parseEquipmentCSV = (
 ): InventoryItem[] => {
   if (!csvText) return [];
 
-  const rows: string[][] = [];
-  let currentRow: string[] = [];
-  let currentField = '';
-  let inQuotes = false;
+  const lines = csvText.trim().split('\n');
 
-  for (let i = 0; i < csvText.length; i++) {
-    const char = csvText[i];
-    const nextChar = csvText[i + 1];
+  const HEADER_ROW_INDEX = 13;
+  const DATA_START_INDEX = 14;
+  const BRANCH_COL_INDEX = 1;
+  const ITEM_START_COL = 3;
 
-    if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        currentField += '"'; 
-        i++; 
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      currentRow.push(currentField); 
-      currentField = '';
-    } else if ((char === '\r' || char === '\n') && !inQuotes) {
-      if (char === '\r' && nextChar === '\n') i++;
-      currentRow.push(currentField);
-      rows.push(currentRow);
-      currentRow = [];
-      currentField = '';
-    } else {
-      currentField += char;
-    }
-  }
-  if (currentField || currentRow.length > 0) {
-    currentRow.push(currentField);
-    rows.push(currentRow);
-  }
+  const headerRow = lines[HEADER_ROW_INDEX]
+    .split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
+    .map(h => h.trim().replace(/^"|"$/g, ''));
 
- 
-  let headerRowIndex = -1;
-  for (let i = 0; i < Math.min(rows.length, 50); i++) {
-      const colB = rows[i][1]?.trim(); 
-      if (colB === 'Shop') {
-          headerRowIndex = i;
-          break;
-      }
-  }
-
-  if (headerRowIndex === -1) return [];
-
-  const subHeaderIndex = headerRowIndex + 1;
-  const subHeaders = rows[subHeaderIndex]; 
-
-  if (!subHeaders) return []; 
-
-  const dataStartIndex = subHeaderIndex + 1;
-
+  /** 🔑 map สำหรับรวมข้อมูล */
   const map = new Map<string, InventoryItem>();
 
-  for (let i = dataStartIndex; i < rows.length; i++) {
-    const row = rows[i];
-    if (row.length < 2) continue;
-
-    const rawBranch = row[1]?.trim();
+  for (let i = DATA_START_INDEX; i < lines.length; i++) {
+    const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+    const rawBranch = (row[BRANCH_COL_INDEX] || '').trim().replace(/^"|"$/g, '');
     if (!rawBranch) continue;
 
-    let branch = "";
-    if (branchSet.has(rawBranch)) {
-        branch = rawBranch;
-    } else {
-        const target = rawBranch.replace(/\s+/g, '').toLowerCase();
-        for (const existing of branchSet) {
-            if (existing.replace(/\s+/g, '').toLowerCase() === target) {
-                branch = existing;
-                break;
-            }
-        }
-    }
+ let branch = findBestMatchBranch(rawBranch, branchSet);
 
-    if (!branch) continue; 
+// 🔑 ถ้าไม่เจอ ให้ fallback ด้วย normalize
+if (!branchSet.has(branch)) {
+  const normalizedRaw = normalizeBranchKey(rawBranch);
 
-    for (let col = 3; col < subHeaders.length; col++) {
-   
-      const header = subHeaders[col];
-      
+  const fallback = Array.from(branchSet).find(
+    b => normalizeBranchKey(b) === normalizedRaw
+  );
 
-      if (!header || header.toLowerCase().includes('total')) continue;
+  if (fallback) {
+    branch = fallback;
+  } else {
+    // ❌ ไม่ทิ้ง row แต่ข้ามจริง ๆ เฉพาะกรณีไม่ match เลย
+    continue;
+  }
+}
 
-      const item = header.replace(/^Quantity\s*/i, '').trim();
+    for (let col = ITEM_START_COL; col < headerRow.length; col++) {
+      const rawHeader = headerRow[col];
+      if (!rawHeader) continue;
 
-      const qty = parseInt(row[col]?.replace(/,/g, '').trim() || '0', 10);
-      
-      if (qty > 0) {
-        const key = `${branch}|${item}`;
-        if (map.has(key)) {
-          map.get(key)!.qty += qty;
-        } else {
-          map.set(key, {
-            id: `EQ_${normalizeBranchKey(branch)}_${item}`.replace(/\s+/g, '_'),
-            branch,
-            branchKey: normalizeBranchKey(branch),
-            category: categoryName,
-            item, 
-            qty
-          });
-        }
+      // 👉 "Quantity Type 2" → "Type 2"
+      const itemName = rawHeader.replace(/^Quantity\s*/i, '').trim();
+      const qty = parseInt((row[col] || '').replace(/"/g, '').trim(), 10);
+      if (isNaN(qty) || qty <= 0) continue;
+
+      const key = `${branch}|${itemName}`;
+
+      if (map.has(key)) {
+        map.get(key)!.qty += qty;
+      } else {
+        map.set(key, {
+          id: `EQ_${normalizeBranchKey(branch)}_${itemName}`,
+          branch,
+          branchKey: normalizeBranchKey(branch),
+          category: categoryName,
+          item: itemName,
+          qty
+        });
       }
     }
   }
@@ -273,48 +256,40 @@ const parseEquipmentCSV = (
   return Array.from(map.values());
 };
 
-const parseTrackingCSV = (
-  csvText: string,
-  branchSet: Set<string>
-): Record<string, TrackingInfo[]> => {
-  const map: Record<string, TrackingInfo[]> = {};
-  const lines = csvText.trim().split('\n');
 
-  for (let i = 1; i < lines.length; i++) {
-    const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-    const rawBranch = row[0]?.replace(/^"|"$/g, '').trim();
-    if (!rawBranch) continue;
 
-    const branch = resolveCanonicalBranch(rawBranch, branchSet);
-    if (!branch) continue;
 
-    const result: TrackingInfo[] = [];
+    const parseTrackingCSV = (csvText: string, branchSet: Set<string>): Record<string, TrackingInfo[]> => {
+        const lines = csvText.trim().split('\n');
+        const map: Record<string, TrackingInfo[]> = {};
+        for (let i = 1; i < lines.length; i++) {
+            const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
+            if (row.length < 2) continue;
+            
+            const rawBranch = row[0].trim().replace(/^"|"$/g, '');
+   
+            const matchedBranch = findBestMatchBranch(rawBranch, branchSet);
 
-    const pop = row[1]?.trim();
-    const equip = row[2]?.trim();
-
-    if (pop && pop !== '-' && pop !== '0') {
-      pop.split(/[\n,]+/).forEach(n =>
-        result.push({ number: n.trim(), type: 'POP' })
-      );
-    }
-
-    if (equip && equip !== '-' && equip !== '0') {
-      equip.split(/[\n,]+/).forEach(n =>
-        result.push({ number: n.trim(), type: 'Equipment' })
-      );
-    }
-
-    if (result.length) {
-      map[branch] = map[branch]
-        ? [...map[branch], ...result]
-        : result;
-    }
-  }
-
-  return map;
-};
-
+            const popTracking = (row[1] || "").trim().replace(/^"|"$/g, '');
+            const equipTracking = (row[2] || "").trim().replace(/^"|"$/g, '');
+            const numbers: TrackingInfo[] = [];
+            if (popTracking && popTracking !== "-" && popTracking !== "0") {
+                popTracking.split(/[\n,]+/).forEach(t => { const cleanT = t.trim(); if(cleanT) numbers.push({ number: cleanT, type: 'POP' }); });
+            }
+            if (equipTracking && equipTracking !== "-" && equipTracking !== "0") {
+                equipTracking.split(/[\n,]+/).forEach(t => { const cleanT = t.trim(); if(cleanT) numbers.push({ number: cleanT, type: 'Equipment' }); });
+            }
+            
+            if (matchedBranch && numbers.length > 0) { 
+                if (map[matchedBranch]) {
+                    map[matchedBranch] = [...map[matchedBranch], ...numbers];
+                } else {
+                    map[matchedBranch] = numbers; 
+                }
+            }
+        }
+        return map;
+    };
 
     const parseCSV = (
         csvText: string, 
@@ -383,48 +358,21 @@ const parseTrackingCSV = (
         });
     };
 
-// const filteredData = useMemo<InventoryItem[]>(() => {
-//   if (!selectedBranch) return [];
-
-//   let data = database.filter(d => {
-
-//     if (d.category === 'Equipment-Order') {
-//       return (
-//         selectedCategory === 'Equipment-Order' ||
-//         availableTrackings.some(t => t.type === 'Equipment')
-//       );
-//     }
-
-
-//     return d.branchKey === normalizeBranchKey(selectedBranch);
-//   });
-
-//   if (selectedCategory !== 'all') {
-//     data = data.filter(d => d.category === selectedCategory);
-//   }
-
-//   if (searchTerm) {
-//     const lower = searchTerm.toLowerCase();
-//     data = data.filter(d => d.item.toLowerCase().includes(lower));
-//   }
-
-//   return data;
-// }, [
-//   database,
-//   selectedBranch,
-//   selectedCategory,
-//   searchTerm,
-//   availableTrackings
-// ]);
-
 const filteredData = useMemo<InventoryItem[]>(() => {
   if (!selectedBranch) return [];
 
-  const branchKey = normalizeBranchKey(selectedBranch);
+  let data = database.filter(d => {
 
-  let data = database.filter(
-    d => d.branchKey === branchKey
-  );
+    if (d.category === 'Equipment-Order') {
+      return (
+        selectedCategory === 'Equipment-Order' ||
+        availableTrackings.some(t => t.type === 'Equipment')
+      );
+    }
+
+
+    return d.branchKey === normalizeBranchKey(selectedBranch);
+  });
 
   if (selectedCategory !== 'all') {
     data = data.filter(d => d.category === selectedCategory);
@@ -432,13 +380,20 @@ const filteredData = useMemo<InventoryItem[]>(() => {
 
   if (searchTerm) {
     const lower = searchTerm.toLowerCase();
-    data = data.filter(d =>
-      d.item.toLowerCase().includes(lower)
-    );
+    data = data.filter(d => d.item.toLowerCase().includes(lower));
   }
 
   return data;
-}, [database, selectedBranch, selectedCategory, searchTerm]);
+}, [
+  database,
+  selectedBranch,
+  selectedCategory,
+  searchTerm,
+  availableTrackings
+]);
+
+
+
 
 
 
@@ -514,7 +469,6 @@ const filteredData = useMemo<InventoryItem[]>(() => {
             const payload: SubmitPayload = { 
                 branch: selectedBranch, 
                 trackingNo: selectedTrackingNo || "-", 
-                category: selectedCategory,
                 date: selectedDate, 
                 note: finalNote, 
                 images: mediaBase64, 
@@ -624,32 +578,7 @@ const filteredData = useMemo<InventoryItem[]>(() => {
                             </div>
 
                             {selectedBranch && filteredData.length > 0 && (
-                                <><div className="progress-section">
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 5, color: 'var(--text-sub)' }}>
-                                        <span>Inspection Progress</span>
-                                        <span>{progress.count}/{progress.total} ({progress.percent}%)</span></div>
-                                        <div className="progress-container"><div className="progress-bar" style={{ width: `${progress.percent}%` }}>
-                                            </div>
-                                            </div>
-                                            </div>
-                                            <div className="result-card">
-                                                <div className="result-header">
-                                                    <span className="branch-title">{selectedBranch}</span>
-                                                    <span className="total-badge">Total {filteredData.length} items</span>
-                                                    </div>
-                                                    <div className="table-container">
-                                                        <table>
-                                                            <thead>
-                                                                <tr>
-                                                                    <th style={{ width: 50 }}>Category</th>
-                                                                    <th>Item</th>
-                                                                    <th style={{ width: 40, textAlign: 'center' }}>Qty</th>
-                                                                    <th style={{width:80, textAlign: 'center' }}>
-                                                                        <div style={{display:'flex', flexDirection:'column', alignItems:'center',gap:2}}>
-                                                                            <span style={{fontSize: '0.6rem'}}>Received</span>
-                                                                            <div style={{display:'flex', gap: 5}}>
-                                                                                <input type="checkbox" className="custom-checkbox header-checkbox" checked={isAllSelected} onChange={handleSelectAll} disabled={!selectedDate || filteredData.length === 0} title="Select All"/>
-                                                     </div></div></th></tr></thead><tbody>{currentTableData.map(row => { const isChecked = !!checkedItems[row.id]; return (<tr key={row.id} className={isChecked ? 'checked-row' : ''} onClick={() => handleToggleCheck(row.id)}><td><span style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#f1f5f9', borderRadius: 4, color: '#64748b' }}>{row.category.replace('RE-', '').replace('-POP', '')}</span></td><td className="item-name" style={{ color: '#334155', whiteSpace: 'normal', pointerEvents: 'none' }}>{searchTerm ? (<span>{row.item.split(new RegExp(`(${searchTerm})`, 'gi')).map((part, i) => part.toLowerCase() === searchTerm.toLowerCase() ? <span key={i} style={{background: '#fef08a'}}>{part}</span> : part)}</span>) : row.item}</td><td style={{ textAlign: 'center', pointerEvents: 'none' }}><span className="qty-pill">{row.qty}</span></td><td style={{ textAlign: 'center' }}><div style={{ display: 'flex', justifyContent: 'center' }}><input type="checkbox" className="custom-checkbox" checked={isChecked} readOnly style={{ pointerEvents: 'none' }} disabled={!selectedDate} /></div></td></tr>) })}</tbody></table></div>{totalPages > 1 && (<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 15, padding: '15px 0', borderTop: '1px solid #f1f5f9' }}><button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} style={{ padding: '8px 16px', border: '1px solid #cbd5e1', borderRadius: 6, background: currentPage === 1 ? '#f1f5f9' : 'white', color: currentPage === 1 ? '#94a3b8' : '#334155', cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}>Prev</button><span style={{ fontSize: '0.9rem', color: '#64748b' }}>Page <strong>{currentPage}</strong> of {totalPages}</span><button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} style={{ padding: '8px 16px', border: '1px solid #cbd5e1', borderRadius: 6, background: currentPage === totalPages ? '#f1f5f9' : 'white', color: currentPage === totalPages ? '#94a3b8' : '#334155', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}>Next</button></div>)}</div><div className={`report-section ${reportClass}`}><div className="report-header"><div><span style={{ marginRight: 8 }}>{reportIcon}</span><span>{reportTitle}</span></div>{(isComplete || isDefectMode) && (<button className={`defect-toggle-btn ${isDefectMode ? 'active' : ''}`} onClick={() => setIsDefectMode(!isDefectMode)}>{isDefectMode ? '↩️ Cancel Defect Report' : '⚠️ Found Defect?'}</button>)}</div><div className="report-grid">{(!isComplete || isDefectMode) && (<div><label style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: 5 }}>Issue Details</label><textarea rows={3} placeholder="Specify missing or damaged POP items..." value={reportNote} onChange={(e) => setReportNote(e.target.value)} /></div>)}<div><label style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: 5 }}>Attach Photo/Video (Required)</label><div className="upload-box"><input type="file" className="upload-input" accept="image/*,video/*" multiple onChange={handleFileSelect} /><div style={{ fontSize: 24, marginBottom: 5, color: '#fb923c' }}>📷 🎥</div><div style={{ color: '#f97316', fontSize: '0.85rem', fontWeight: 600, pointerEvents: 'none' }}>Tap to take photo/video or select files<br /><span style={{ color: 'red', fontSize: '0.7rem' }}>(Max 10 files)</span></div></div><div className="preview-grid">{selectedFiles.map((file, index) => { const url = URL.createObjectURL(file); return (<div key={index} className="preview-item">{file.type.startsWith('video/') ? <video src={url} className="preview-media" controls /> : <img src={url} alt="preview" className="preview-media" />}<div className="delete-btn" onClick={() => removeFile(index)}>×</div></div>) })}</div></div><button className="btn-submit" onClick={handleSubmit}>{btnText}</button></div></div></>
+                                <><div className="progress-section"><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 5, color: 'var(--text-sub)' }}><span>Inspection Progress</span><span>{progress.count}/{progress.total} ({progress.percent}%)</span></div><div className="progress-container"><div className="progress-bar" style={{ width: `${progress.percent}%` }}></div></div></div><div className="result-card"><div className="result-header"><span className="branch-title">{selectedBranch}</span><span className="total-badge">Total {filteredData.length} items</span></div><div className="table-container"><table><thead><tr><th style={{ width: 50 }}>Category</th><th>Item</th><th style={{ width: 40, textAlign: 'center' }}>Qty</th><th style={{width:80, textAlign: 'center' }}><div style={{display:'flex', flexDirection:'column', alignItems:'center',gap:2}}><span style={{fontSize: '0.6rem'}}>Received</span><div style={{display:'flex', gap: 5}}><input type="checkbox" className="custom-checkbox header-checkbox" checked={isAllSelected} onChange={handleSelectAll} disabled={!selectedDate || filteredData.length === 0} title="Select All"/><button onClick={handleClearSelection} disabled={!selectedDate || filteredData.length === 0} style={{border:'none', background:'transparent', cursor:'pointer', fontSize:'12px'}} title="Clear Selection">❌</button></div></div></th></tr></thead><tbody>{currentTableData.map(row => { const isChecked = !!checkedItems[row.id]; return (<tr key={row.id} className={isChecked ? 'checked-row' : ''} onClick={() => handleToggleCheck(row.id)}><td><span style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#f1f5f9', borderRadius: 4, color: '#64748b' }}>{row.category.replace('RE-', '').replace('-POP', '')}</span></td><td className="item-name" style={{ color: '#334155', whiteSpace: 'normal', pointerEvents: 'none' }}>{searchTerm ? (<span>{row.item.split(new RegExp(`(${searchTerm})`, 'gi')).map((part, i) => part.toLowerCase() === searchTerm.toLowerCase() ? <span key={i} style={{background: '#fef08a'}}>{part}</span> : part)}</span>) : row.item}</td><td style={{ textAlign: 'center', pointerEvents: 'none' }}><span className="qty-pill">{row.qty}</span></td><td style={{ textAlign: 'center' }}><div style={{ display: 'flex', justifyContent: 'center' }}><input type="checkbox" className="custom-checkbox" checked={isChecked} readOnly style={{ pointerEvents: 'none' }} disabled={!selectedDate} /></div></td></tr>) })}</tbody></table></div>{totalPages > 1 && (<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 15, padding: '15px 0', borderTop: '1px solid #f1f5f9' }}><button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} style={{ padding: '8px 16px', border: '1px solid #cbd5e1', borderRadius: 6, background: currentPage === 1 ? '#f1f5f9' : 'white', color: currentPage === 1 ? '#94a3b8' : '#334155', cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}>Prev</button><span style={{ fontSize: '0.9rem', color: '#64748b' }}>Page <strong>{currentPage}</strong> of {totalPages}</span><button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} style={{ padding: '8px 16px', border: '1px solid #cbd5e1', borderRadius: 6, background: currentPage === totalPages ? '#f1f5f9' : 'white', color: currentPage === totalPages ? '#94a3b8' : '#334155', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}>Next</button></div>)}</div><div className={`report-section ${reportClass}`}><div className="report-header"><div><span style={{ marginRight: 8 }}>{reportIcon}</span><span>{reportTitle}</span></div>{(isComplete || isDefectMode) && (<button className={`defect-toggle-btn ${isDefectMode ? 'active' : ''}`} onClick={() => setIsDefectMode(!isDefectMode)}>{isDefectMode ? '↩️ Cancel Defect Report' : '⚠️ Found Defect?'}</button>)}</div><div className="report-grid">{(!isComplete || isDefectMode) && (<div><label style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: 5 }}>Issue Details</label><textarea rows={3} placeholder="Specify missing or damaged POP items..." value={reportNote} onChange={(e) => setReportNote(e.target.value)} /></div>)}<div><label style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: 5 }}>Attach Photo/Video (Required)</label><div className="upload-box"><input type="file" className="upload-input" accept="image/*,video/*" multiple onChange={handleFileSelect} /><div style={{ fontSize: 24, marginBottom: 5, color: '#fb923c' }}>📷 🎥</div><div style={{ color: '#f97316', fontSize: '0.85rem', fontWeight: 600, pointerEvents: 'none' }}>Tap to take photo/video or select files<br /><span style={{ color: 'red', fontSize: '0.7rem' }}>(Max 10 files)</span></div></div><div className="preview-grid">{selectedFiles.map((file, index) => { const url = URL.createObjectURL(file); return (<div key={index} className="preview-item">{file.type.startsWith('video/') ? <video src={url} className="preview-media" controls /> : <img src={url} alt="preview" className="preview-media" />}<div className="delete-btn" onClick={() => removeFile(index)}>×</div></div>) })}</div></div><button className="btn-submit" onClick={handleSubmit}>{btnText}</button></div></div></>
                             )}
                             {selectedBranch && filteredData.length === 0 && (<div className="empty-state"><span>📭</span><p>No POP items found for this branch</p></div>)}
                             {!selectedBranch && (<div className="empty-state"><span>👈</span><p>Select a branch to start checking POP</p></div>)}

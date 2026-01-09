@@ -28,6 +28,8 @@ body {
   font-family: 'Inter', 'Sarabun', sans-serif;
   background-color: var(--bg-body);
   -webkit-font-smoothing: antialiased; 
+  overflow-x: hidden;
+  
 }
 
 .pop-container {
@@ -608,4 +610,520 @@ td:last-child {
 
 .skeleton-col {
   height: 24px;
+}
+
+
+/* =========================================
+   TRACKING NO. & INPUT STYLES
+   (ปรับปรุงช่องกรอกและ Dropdown ให้สวยเหมือนกัน)
+   ========================================= */
+
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%; 
+}
+
+
+.input-group label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #475569; 
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+
+.controls-card select,
+.controls-card input[type="text"],
+.controls-card input[type="date"] {
+    width: 100%;
+    height: 45px;
+    padding: 0 12px;
+    font-size: 0.95rem;
+    font-family: 'Inter', 'Sarabun', sans-serif;
+    color: #334155;
+    
+    background-color: #f8fafc; 
+    border: 1px solid #cbd5e1; 
+    border-radius: 8px; 
+    
+    transition: all 0.2s ease;
+    appearance: none; 
+    -webkit-appearance: none;
+}
+
+.controls-card select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem; 
+}
+
+
+.controls-card select:focus,
+.controls-card input:focus {
+    outline: none;
+    border-color: #4f46e5; 
+    background-color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); 
+}
+
+
+.controls-card input::placeholder {
+    color: #94a3b8;
+}
+
+
+.controls-card select:disabled,
+.controls-card input:disabled {
+    background-color: #e2e8f0;
+    color: #94a3b8;
+    cursor: not-allowed;
+}
+
+/* =========================================
+   ADMIN PANEL STYLES
+   (สำหรับหน้า AdminPanel.tsx)
+   ========================================= */
+
+/* ปรับ Layout กล่องเลือกวันที่ใน Admin ให้เป็นแนวนอน */
+.admin-date-controls {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.admin-date-input {
+  width: 160px;
+  padding: 10px;
+  margin: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background-color: #f8fafc;
+}
+
+.admin-check-btn {
+  background-color: var(--text-main);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 24px;
+  cursor: pointer;
+  height: 42px; /* ให้สูงเท่า Input */
+  white-space: nowrap;
+  font-weight: 600;
+  transition: opacity 0.2s;
+}
+
+.admin-check-btn:hover {
+  opacity: 0.9;
+}
+
+/* ส่วน Login Box */
+.login-box {
+  max-width: 350px;
+  margin: 60px auto;
+  padding: 30px;
+  background: white;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.login-input {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.login-btn {
+  width: 100%;
+  padding: 12px;
+  background-color: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ส่วนแสดงผลสรุป (Summary Section) */
+.summary-section {
+  background-color: white;
+  padding: 25px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 25px;
+  border: 1px solid var(--border);
+}
+
+.summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 600px) {
+  .summary-grid {
+    grid-template-columns: 1fr; /* มือถือให้เรียงลงมา */
+  }
+  
+  .admin-date-controls {
+    flex-wrap: wrap; /* มือถือให้ปัดลงมาได้ถ้าแน่นเกิน */
+  }
+}
+
+.summary-col {
+  padding: 15px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+
+.summary-col.missing {
+  background-color: #fef2f2;
+  border-color: #fecaca;
+}
+
+.summary-col.reported {
+  background-color: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.summary-list {
+  margin: 0;
+  padding-left: 20px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.summary-list li {
+  margin-bottom: 6px;
+  font-size: 0.95rem;
+}
+
+/* ปุ่มส่งเมล */
+.email-btn {
+  background-color: #f59e0b;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.email-btn:hover {
+  background-color: #d97706;
+}
+/* --- Admin Panel Styles (New) --- */
+
+.login-box {
+    max-width: 350px;
+    margin: 40px auto;
+    padding: 30px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    text-align: center;
+}
+.login-title { margin-bottom: 20px; }
+.login-input {
+    width: 100%; padding: 12px; margin-bottom: 15px;
+    border: 1px solid #e2e8f0; border-radius: 8px; font-size: 1rem;
+}
+.login-actions { display: flex; gap: 10px; }
+.login-btn { flex: 1; padding: 10px; background: #334155; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+.login-cancel-btn { flex: 1; padding: 10px; background: #cbd5e1; color: #334155; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+
+/* Admin Controls */
+.admin-date-controls {
+    display: flex; flex-direction: row; align-items: center; justify-content: center;
+    gap: 10px; flex-wrap: nowrap; width: 100%; white-space: nowrap;
+}
+.admin-date-label { margin: 0; font-weight: 600; font-size: 0.9rem; }
+.admin-date-input { width: 150px; padding: 8px; margin: 0; border-radius: 6px; border: 1px solid #e2e8f0; }
+.date-separator { margin: 0 5px; color: #64748b; }
+.admin-check-btn {
+    background: #334155; color: white; border: none; border-radius: 6px;
+    padding: 8px 20px; cursor: pointer; height: 42px; font-weight: 600;
+}
+
+/* Summary Section */
+.summary-section {
+    padding: 20px; background: white; border-radius: 16px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 25px;
+}
+.summary-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-bottom: 15px; border-bottom: 1px solid #eee; margin-bottom: 15px; gap: 10px; flex-wrap: wrap;
+}
+.summary-title { margin: 0; color: #334155; font-size: 1.1rem; }
+.email-btn {
+    background: #ea580c; color: white; border: none; padding: 8px 16px;
+    border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9rem;
+}
+
+.summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.summary-col { padding: 15px; border-radius: 8px; border: 1px solid transparent; }
+.summary-col.reported { background: #f0fdf4; border-color: #bbf7d0; }
+.summary-col.missing { background: #fef2f2; border-color: #fecaca; }
+
+.col-header { margin: 0 0 10px 0; font-size: 1rem; }
+.col-header.success { color: #15803d; }
+.col-header.danger { color: #b91c1c; }
+
+.summary-list { margin: 0; padding-left: 20px; max-height: 300px; overflow-y: auto; }
+.summary-list.success { color: #15803d; }
+.summary-list.danger { color: #b91c1c; }
+.summary-list li { margin-bottom: 5px; }
+.empty-list { list-style: none; color: #94a3b8; font-style: italic; }
+
+/* Daily Details */
+.daily-details-container { display: flex; flex-direction: column; gap: 20px; }
+.daily-title { margin: 10px 0; color: #64748b; font-size: 1rem; text-transform: uppercase; letter-spacing: 0.5px; }
+.daily-card {
+    padding: 20px; background: white; border-radius: 16px;
+    border-left: 5px solid #3b82f6; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+.daily-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 15px; flex-wrap: wrap; gap: 10px;
+}
+.daily-date { margin: 0; color: #1e40af; font-size: 1.1rem; }
+.daily-email-btn {
+    background: #f59e0b; color: white; border: none; padding: 6px 12px;
+    border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600;
+}
+.daily-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.daily-col { padding: 15px; border-radius: 8px; }
+.daily-col.success-bg { background: #f0fdf4; border: 1px solid #bbf7d0; }
+.daily-col.danger-bg { background: #fef2f2; border: 1px solid #fecaca; }
+.daily-col-title { margin: 0 0 5px 0; font-size: 0.95rem; }
+.daily-col-title.success { color: #166534; }
+.daily-col-title.danger { color: #991b1b; }
+.daily-list { font-size: 0.85rem; max-height: 150px; overflow-y: auto; line-height: 1.5; }
+.daily-list.success { color: #15803d; }
+.daily-list.danger { color: #b91c1c; }
+
+/* Loading Text */
+.loading-text { margin-top: 15px; font-weight: 600; color: #ea580c; }
+
+/* Responsive */
+@media (max-width: 600px) {
+    .summary-grid, .daily-grid { grid-template-columns: 1fr; }
+    .admin-date-controls { flex-wrap: wrap; }
+    .admin-date-input { width: 100%; }
+    .admin-check-btn { width: 100%; }
+}
+
+/* =========================================
+   HISTORY PANEL STYLES
+   (สำหรับหน้า HistoryPanel.tsx)
+   ========================================= */
+
+/* Search Button */
+.search-btn-container {
+    display: flex;
+    align-items: flex-end;
+}
+
+.search-btn {
+    width: 100%;
+    padding: 12px;
+    background-color: #0ea5e9;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 1rem;
+    transition: background-color 0.2s;
+}
+
+.search-btn:hover {
+    background-color: #0284c7;
+}
+
+.search-btn:disabled {
+    background-color: #94a3b8;
+    cursor: not-allowed;
+}
+
+/* History Result Container */
+.history-result {
+    padding: 20px;
+    min-height: 300px;
+}
+
+.spinner-center {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #0ea5e9;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+}
+
+/* Export Button */
+.export-btn-container {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.export-btn {
+    background-color: #ef4444;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.95rem;
+}
+
+.export-btn:hover {
+    background-color: #dc2626;
+}
+
+/* PDF Content Styles (Simulating Paper) */
+.pdf-content {
+    padding: 40px;
+    background-color: white;
+    color: black;
+    /* Optional: Add shadow/border to look like paper */
+    /* box-shadow: 0 0 10px rgba(0,0,0,0.1); */
+}
+
+.pdf-header {
+    text-align: center;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 10px;
+}
+
+.pdf-title {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #1e293b;
+}
+
+.pdf-subtitle {
+    margin: 5px 0 0 0;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.pdf-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+}
+
+/* PDF Table */
+.pdf-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    font-size: 0.85rem;
+}
+
+.pdf-table th {
+    background-color: #f1f5f9;
+    color: #333;
+    border: 1px solid #ddd;
+    padding: 8px;
+    font-weight: bold;
+}
+
+.pdf-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+}
+
+/* Helpers */
+.text-right { text-align: right; }
+.text-center { text-align: center; }
+.font-bold { font-weight: bold; }
+.w-60 { width: 60px; }
+.w-100 { width: 100px; }
+.text-success { color: #16a34a; }
+.text-danger { color: #dc2626; }
+.error-text { color: red; padding: 20px; }
+
+/* Alerts & Notes */
+.missing-alert {
+    margin-top: 20px;
+    padding: 15px;
+    border: 1px solid #fca5a5;
+    background-color: #fef2f2;
+    border-radius: 8px;
+}
+
+.missing-title {
+    margin: 0 0 10px 0;
+    color: #b91c1c;
+    font-size: 1rem;
+}
+
+.missing-content {
+    white-space: pre-wrap;
+    font-family: 'Sarabun', sans-serif;
+    margin: 0;
+    font-size: 0.9rem;
+    color: #333;
+}
+
+.note-box {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    font-size: 0.95rem;
+}
+
+.pdf-footer {
+    margin-top: 50px;
+    text-align: center;
+    padding-top: 20px;
+}
+
+.timestamp {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    margin-top: 5px;
 }
