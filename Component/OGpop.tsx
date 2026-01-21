@@ -2,18 +2,53 @@ import React, { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'r
 import './PopTracking.css';
 import AdminPanel from './AdminPanel'; 
 import HistoryPanel from './HistoryPanel'; 
+import OrderPanel from './OrderPanel'; 
+import {
+  normalizeBranchKey,
+  resolveCanonicalBranch
+} from './utils/branchResolver';
 
 // --- Type Definitions ---
 interface InventoryItem { id: string; branch: string; branchKey: string;  category: string; item: string; qty: number; }
 interface SnapshotItem { id: string; item: string; qty: number; category: string; isChecked: boolean; }
 interface ProgressStats { count: number; total: number; percent: number; isComplete: boolean; }
-interface SubmitPayload { branch: string; trackingNo: string; date: string; note: string; images: string[]; missingItems: string; itemsSnapshot: SnapshotItem[]; }
-interface TrackingInfo { number: string; type: 'POP' | 'Equipment'; }
+interface OrderItem {
+  category: string;
+  branch: string;
+  branchKey: string;
+  item: string;
+  qty: number;
+}
+
+interface OrderData {
+  orderNo: string;
+  orderDate: string;
+  trackingNo: string;
+  items: OrderItem[];
+}
+
+// Updated Payload Interface
+interface SubmitPayload { 
+    branch: string; 
+    trackingNo: string; 
+    category: string; 
+    date: string; 
+    note: string; 
+    images: string[]; 
+    missingItems: string; 
+    itemsSnapshot: SnapshotItem[]; 
+    // New Fields
+    signerName: string; // <-- เพิ่มช่องชื่อ
+    signerRole: string;
+    signatureImage: string; 
+}
+
+interface TrackingInfo { number: string; type: 'POP' | 'Equipment'; }z
 
 type LoadingStatus = 'loading' | 'ready' | 'error';
-type AppMode = 'entry' | 'history' | 'admin';
+type AppMode = 'entry' | 'history' | 'admin' | 'order';
 
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxiqI2_uyNaMcgs5o1vM0rZXAWssK3tQ48E4IWOmZwuqa_wINJCAtWQ-ZSAUvi3aAuj/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxb8WlTwDbOjC2vmeN9v5dRs1FPOFEfxsp1C91D7nXZGlMV4vl2k8y206d_jH--JYye/exec";
 
 const SHEET_URLS = {
     brand: "https://docs.google.com/spreadsheets/d/1f4jzIQd2wdIAMclsY4vRw04SScm5xUYN0bdOz8Rn4Pk/export?format=csv&gid=577319442",
@@ -22,10 +57,6 @@ const SHEET_URLS = {
     tracking: "https://docs.google.com/spreadsheets/d/1f4jzIQd2wdIAMclsY4vRw04SScm5xUYN0bdOz8Rn4Pk/export?format=csv&gid=1495482850",
     equipment: "https://docs.google.com/spreadsheets/d/1f4jzIQd2wdIAMclsY4vRw04SScm5xUYN0bdOz8Rn4Pk/export?format=csv&gid=288598451"
 };
-const normalizeBranchKey = (name: string) =>
-  name
-    .toLowerCase()
-    .replace(/[^a-z0-9\u0E00-\u0E7F]/g, '');
 
 const SkeletonLoader = () => {
     return (
@@ -40,6 +71,7 @@ const SkeletonLoader = () => {
 };
 
 const PopTracking: React.FC = () => {
+  
     const [database, setDatabase] = useState<InventoryItem[]>([]);
     const [branches, setBranches] = useState<string[]>([]);
     const [trackingMap, setTrackingMap] = useState<Record<string, TrackingInfo[]>>({}); 
@@ -60,7 +92,19 @@ const PopTracking: React.FC = () => {
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
     const [isDefectMode, setIsDefectMode] = useState<boolean>(false);
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
     
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [isDrawing, setIsDrawing] = useState(false);
+    
+
+    const [signerName, setSignerName] = useState<string>(''); 
+    const [signerRole, setSignerRole] = useState<string>('');
+    const [isAccepted, setIsAccepted] = useState<boolean>(false);
+    const [hasSignature, setHasSignature] = useState<boolean>(false);
+    
+const [orders, setOrders] = useState<OrderData[]>([]);
+
     useEffect(() => {
         const today = new Date().toISOString().split('T')[0];
         setSelectedDate(today);
@@ -79,17 +123,16 @@ const PopTracking: React.FC = () => {
                 const [brandData, systemData, specialData, equipmentData, trackingData] = await Promise.all([
                     fetchData(SHEET_URLS.brand), 
                     fetchData(SHEET_URLS.system), 
-                    fetchData(SHEET_URLS.special),
+                    fetchData(SHEET_URLS.special), 
                     fetchData(SHEET_URLS.equipment),
                     fetchData(SHEET_URLS.tracking)
                 ]);
                 
                 let allData: InventoryItem[] = [];
                 const allBranches = new Set<string>();
-                const collectedTracking: Record<string, Set<string>> = {}; 
-
+        
                 const parseData = (csv: string, catName: string) => {
-                    const parsed = parseCSV(csv, catName, allBranches, collectedTracking);
+                    const parsed = parseCSV(csv, catName, allBranches);
                     allData = [...allData, ...parsed];
                 };
 
@@ -97,12 +140,10 @@ const PopTracking: React.FC = () => {
                 parseData(systemData, "RE-System"); 
                 parseData(specialData, "Special-POP");
                 
-           
                 const equipmentItems = parseEquipmentCSV(equipmentData, "Equipment-Order", allBranches);
                 allData = [...allData, ...equipmentItems];
 
                 const parsedTrackingMap = parseTrackingCSV(trackingData, allBranches);
-
                 const sortedBranches = Array.from(allBranches).sort().filter(b => b.length > 2 && !b.includes("Total") && !b.includes("POP"));
                 
                 setDatabase(allData); 
@@ -115,19 +156,23 @@ const PopTracking: React.FC = () => {
     }, []);
 
     useEffect(() => { setCurrentPage(1); }, [selectedBranch, selectedCategory, searchTerm]);
+useEffect(() => {
 
+  loadOrders(); // 👈 เพิ่มบรรทัดนี้
+}, []);
     useEffect(() => {
         if (selectedBranch) {
             const list = trackingMap[selectedBranch] || [];
             setAvailableTrackings(list);
             
+            // Auto-select if only one tracking
             if (list.length === 1) {
                 const info = list[0];
                 setSelectedTrackingNo(info.number);
                 handleCategoryAutoSwitch(info.type);
             } else {
                 setSelectedTrackingNo('');
-          
+                setSelectedCategory('all');
             }
         } else {
             setAvailableTrackings([]);
@@ -135,207 +180,83 @@ const PopTracking: React.FC = () => {
         }
     }, [selectedBranch, trackingMap]);
 
+
+    const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+        const canvas = canvasRef.current; if (!canvas) return;
+        const ctx = canvas.getContext('2d'); if (!ctx) return;
+        setIsDrawing(true); setHasSignature(true);
+        const rect = canvas.getBoundingClientRect();
+        let x = 0, y = 0;
+        if ('touches' in e) { x = e.touches[0].clientX - rect.left; y = e.touches[0].clientY - rect.top; } 
+        else { x = (e as React.MouseEvent).nativeEvent.offsetX; y = (e as React.MouseEvent).nativeEvent.offsetY; }
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000';
+    };
+
+    const draw = (e: React.MouseEvent | React.TouchEvent) => {
+        if (!isDrawing) return;
+        const canvas = canvasRef.current; if (!canvas) return;
+        const ctx = canvas.getContext('2d'); if (!ctx) return;
+        const rect = canvas.getBoundingClientRect();
+        let x = 0, y = 0;
+        if ('touches' in e) { x = e.touches[0].clientX - rect.left; y = e.touches[0].clientY - rect.top; } 
+        else { x = (e as React.MouseEvent).nativeEvent.offsetX; y = (e as React.MouseEvent).nativeEvent.offsetY; }
+        ctx.lineTo(x, y); ctx.stroke();
+    };
+
+    const endDrawing = () => { setIsDrawing(false); };
+    const clearSignature = () => {
+        const canvas = canvasRef.current; if (!canvas) return;
+        const ctx = canvas.getContext('2d'); if (ctx) { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+        setHasSignature(false);
+    };
+
+    // Helper for category switching
     const handleCategoryAutoSwitch = (type: 'POP' | 'Equipment') => {
-        if (type === 'Equipment') {
-            setSelectedCategory('Equipment-Order');
-        } else {
+        if (type === 'Equipment') { 
+            setSelectedCategory('Equipment-Order'); 
+        } else { 
             setSelectedCategory('all'); 
         }
     };
 
+    // --- UPDATED: Handle Tracking Change ---
     const handleTrackingChange = (e: ChangeEvent<HTMLSelectElement>) => {
         const val = e.target.value;
         setSelectedTrackingNo(val);
-        const found = availableTrackings.find(t => t.number === val);
-        if (found) {
-            handleCategoryAutoSwitch(found.type);
+        
+        const found = availableTrackings.find(t => t.number === val); 
+        if (found) { 
+            handleCategoryAutoSwitch(found.type); 
+            // Reset search and pagination to ensure user sees the relevant items
+            setSearchTerm('');
+            setCurrentPage(1);
         }
     };
 
     const fetchData = async (url: string): Promise<string> => { const response = await fetch(url); if (!response.ok) throw new Error("Network error"); return await response.text(); };
     
-   
-    const findBestMatchBranch = (rawName: string, existingBranches: Set<string>): string => {
-        if (!rawName) return rawName;
-
-        const cleanRaw = rawName.toLowerCase().replace(/[^a-z0-9\u0E00-\u0E7F]/g, ""); 
-        
-        for (const branch of existingBranches) {
-            const cleanBranch = branch.toLowerCase().replace(/[^a-z0-9\u0E00-\u0E7F]/g, "");
-            if (cleanRaw === cleanBranch) return branch;
-        }
-
-   
-        for (const branch of existingBranches) {
-            const cleanBranch = branch.toLowerCase().replace(/[^a-z0-9\u0E00-\u0E7F]/g, "");
-
-            if (cleanRaw.length > 5 && cleanBranch.includes(cleanRaw)) {
-                return branch;
-            }
-        }
-
-        if (rawName.includes("Chiangmai") && !rawName.includes("Festival")) {
-            const match = Array.from(existingBranches).find(b => b.includes("Chiangmai") && b.includes("Festival"));
-            if (match) return match;
-        }
-
-
-        return rawName; 
+    // ... Parsing Logic ...
+    const parseEquipmentCSV = (csvText: string, categoryName: string, branchSet: Set<string>): InventoryItem[] => {
+        if (!csvText) return []; const rows: string[][] = []; let currentRow: string[] = []; let currentField = ''; let inQuotes = false;
+        for (let i = 0; i < csvText.length; i++) { const char = csvText[i]; const nextChar = csvText[i + 1]; if (char === '"') { if (inQuotes && nextChar === '"') { currentField += '"'; i++; } else { inQuotes = !inQuotes; } } else if (char === ',' && !inQuotes) { currentRow.push(currentField); currentField = ''; } else if ((char === '\r' || char === '\n') && !inQuotes) { if (char === '\r' && nextChar === '\n') i++; currentRow.push(currentField); rows.push(currentRow); currentRow = []; currentField = ''; } else { currentField += char; } }
+        if (currentField || currentRow.length > 0) { currentRow.push(currentField); rows.push(currentRow); }
+        let headerRowIndex = -1; for (let i = 0; i < Math.min(rows.length, 50); i++) { if (rows[i][1]?.trim() === 'Shop') { headerRowIndex = i; break; } }
+        if (headerRowIndex === -1) return [];
+        const subHeaderIndex = headerRowIndex + 1; const subHeaders = rows[subHeaderIndex]; if (!subHeaders) return [];
+        const dataStartIndex = subHeaderIndex + 1; const map = new Map<string, InventoryItem>();
+        for (let i = dataStartIndex; i < rows.length; i++) { const row = rows[i]; if (row.length < 2) continue; const rawBranch = row[1]?.trim(); if (!rawBranch) continue; let branch = ""; if (branchSet.has(rawBranch)) { branch = rawBranch; } else { const target = rawBranch.replace(/\s+/g, '').toLowerCase(); for (const existing of branchSet) { if (existing.replace(/\s+/g, '').toLowerCase() === target) { branch = existing; break; } } } if (!branch) continue; for (let col = 3; col < subHeaders.length; col++) { const header = subHeaders[col]; if (!header || header.toLowerCase().includes('total')) continue; const item = header.replace(/^Quantity\s*/i, '').trim(); const qty = parseInt(row[col]?.replace(/,/g, '').trim() || '0', 10); if (qty > 0) { const key = `${branch}|${item}`; if (map.has(key)) { map.get(key)!.qty += qty; } else { map.set(key, { id: `EQ_${normalizeBranchKey(branch)}_${item}`.replace(/\s+/g, '_'), branch, branchKey: normalizeBranchKey(branch), category: categoryName, item, qty }); } } } }
+        return Array.from(map.values());
     };
-
-const parseEquipmentCSV = (
-  csvText: string,
-  categoryName: string,
-  branchSet: Set<string>
-): InventoryItem[] => {
-  if (!csvText) return [];
-
-  const lines = csvText.trim().split('\n');
-
-  const HEADER_ROW_INDEX = 13;
-  const DATA_START_INDEX = 14;
-  const BRANCH_COL_INDEX = 1;
-  const ITEM_START_COL = 3;
-
-  const headerRow = lines[HEADER_ROW_INDEX]
-    .split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
-    .map(h => h.trim().replace(/^"|"$/g, ''));
-
-  /** 🔑 map สำหรับรวมข้อมูล */
-  const map = new Map<string, InventoryItem>();
-
-  for (let i = DATA_START_INDEX; i < lines.length; i++) {
-    const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-    const rawBranch = (row[BRANCH_COL_INDEX] || '').trim().replace(/^"|"$/g, '');
-    if (!rawBranch) continue;
-
- let branch = findBestMatchBranch(rawBranch, branchSet);
-
-// 🔑 ถ้าไม่เจอ ให้ fallback ด้วย normalize
-if (!branchSet.has(branch)) {
-  const normalizedRaw = normalizeBranchKey(rawBranch);
-
-  const fallback = Array.from(branchSet).find(
-    b => normalizeBranchKey(b) === normalizedRaw
-  );
-
-  if (fallback) {
-    branch = fallback;
-  } else {
-    // ❌ ไม่ทิ้ง row แต่ข้ามจริง ๆ เฉพาะกรณีไม่ match เลย
-    continue;
-  }
-}
-
-    for (let col = ITEM_START_COL; col < headerRow.length; col++) {
-      const rawHeader = headerRow[col];
-      if (!rawHeader) continue;
-
-      // 👉 "Quantity Type 2" → "Type 2"
-      const itemName = rawHeader.replace(/^Quantity\s*/i, '').trim();
-      const qty = parseInt((row[col] || '').replace(/"/g, '').trim(), 10);
-      if (isNaN(qty) || qty <= 0) continue;
-
-      const key = `${branch}|${itemName}`;
-
-      if (map.has(key)) {
-        map.get(key)!.qty += qty;
-      } else {
-        map.set(key, {
-          id: `EQ_${normalizeBranchKey(branch)}_${itemName}`,
-          branch,
-          branchKey: normalizeBranchKey(branch),
-          category: categoryName,
-          item: itemName,
-          qty
-        });
-      }
-    }
-  }
-
-  return Array.from(map.values());
-};
-
-
-
-
     const parseTrackingCSV = (csvText: string, branchSet: Set<string>): Record<string, TrackingInfo[]> => {
-        const lines = csvText.trim().split('\n');
-        const map: Record<string, TrackingInfo[]> = {};
-        for (let i = 1; i < lines.length; i++) {
-            const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
-            if (row.length < 2) continue;
-            
-            const rawBranch = row[0].trim().replace(/^"|"$/g, '');
-   
-            const matchedBranch = findBestMatchBranch(rawBranch, branchSet);
-
-            const popTracking = (row[1] || "").trim().replace(/^"|"$/g, '');
-            const equipTracking = (row[2] || "").trim().replace(/^"|"$/g, '');
-            const numbers: TrackingInfo[] = [];
-            if (popTracking && popTracking !== "-" && popTracking !== "0") {
-                popTracking.split(/[\n,]+/).forEach(t => { const cleanT = t.trim(); if(cleanT) numbers.push({ number: cleanT, type: 'POP' }); });
-            }
-            if (equipTracking && equipTracking !== "-" && equipTracking !== "0") {
-                equipTracking.split(/[\n,]+/).forEach(t => { const cleanT = t.trim(); if(cleanT) numbers.push({ number: cleanT, type: 'Equipment' }); });
-            }
-            
-            if (matchedBranch && numbers.length > 0) { 
-                if (map[matchedBranch]) {
-                    map[matchedBranch] = [...map[matchedBranch], ...numbers];
-                } else {
-                    map[matchedBranch] = numbers; 
-                }
-            }
-        }
+        const map: Record<string, TrackingInfo[]> = {}; const lines = csvText.trim().split('\n');
+        for (let i = 1; i < lines.length; i++) { const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); const rawBranch = row[0]?.replace(/^"|"$/g, '').trim(); if (!rawBranch) continue; const branch = resolveCanonicalBranch(rawBranch, branchSet); if (!branch) continue; const result: TrackingInfo[] = []; const pop = row[1]?.trim(); const equip = row[2]?.trim(); if (pop && pop !== '-' && pop !== '0') { pop.split(/[\n,]+/).forEach(n => result.push({ number: n.trim(), type: 'POP' })); } if (equip && equip !== '-' && equip !== '0') { equip.split(/[\n,]+/).forEach(n => result.push({ number: n.trim(), type: 'Equipment' })); } if (result.length) { map[branch] = map[branch] ? [...map[branch], ...result] : result; } }
         return map;
     };
-
-    const parseCSV = (
-        csvText: string, 
-        categoryName: string, 
-        branchSet: Set<string>, 
-        trackingCollector: Record<string, Set<string>>
-    ): InventoryItem[] => {
-        if (!csvText) return [];
-        const lines = csvText.trim().split('\n');
-        let headerIndex = -1;
-        const branchIndices: Record<number, string> = {};
-        const parsedData: InventoryItem[] = [];
-        
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            if (line.includes("Head Office") || line.includes("Central World") || line.includes("Siam Paragon")) {
-                headerIndex = i;
-                const headers = lines[i].split(',');
-                headers.forEach((h, index) => {
-                    const name = h.trim().replace(/^"|"$/g, '');
-                    if (name && !name.includes("Total") && !name.includes("Tracking") && !name.includes("List") && !name.includes("No.") && !name.includes("Item") && !name.includes("Unit")) {
-                        branchSet.add(name); branchIndices[index] = name;
-                    }
-                });
-                break;
-            }
-        }
-        
+    const parseCSV = (csvText: string, categoryName: string, branchSet: Set<string>): InventoryItem[] => {
+        if (!csvText) return []; const lines = csvText.trim().split('\n'); let headerIndex = -1; const branchIndices: Record<number, string> = {}; const parsedData: InventoryItem[] = [];
+        for (let i = 0; i < lines.length; i++) { const line = lines[i]; if (line.includes("Head Office") || line.includes("Central World") || line.includes("Siam Paragon")) { headerIndex = i; const headers = lines[i].split(','); headers.forEach((h, index) => { const name = h.trim().replace(/^"|"$/g, ''); if (name && !name.includes("Total") && !name.includes("Tracking") && !name.includes("List") && !name.includes("No.") && !name.includes("Item") && !name.includes("Unit")) { branchSet.add(name); branchIndices[index] = name; } }); break; } }
         if (headerIndex === -1) return [];
-        
-        for (let i = headerIndex + 1; i < lines.length; i++) {
-            const row = lines[i].split(',');
-            if (row.length < 5) continue;
-            
-            const itemName = (row[1] || row[0] || "").trim().replace(/^"|"$/g, '');
-            if (!itemName || itemName.startsWith("Total") || itemName.toLowerCase().includes("tracking")) continue;
-            
-            for (const [indexStr, branchName] of Object.entries(branchIndices)) {
-                const index = parseInt(indexStr);
-                const qtyStr = (row[index] || "0").trim().replace(/^"|"$/g, '');
-                const qty = parseInt(qtyStr);
-                if (!isNaN(qty) && qty > 0) {
-                    parsedData.push({ branch: branchName,  branchKey: normalizeBranchKey(branchName), category: categoryName, item: itemName, qty: qty, id: `${branchName}_${itemName}`.replace(/\s+/g, '_') });
-                }
-            }
-        }
+        for (let i = headerIndex + 1; i < lines.length; i++) { const row = lines[i].split(','); if (row.length < 5) continue; const itemName = (row[1] || row[0] || "").trim().replace(/^"|"$/g, ''); if (!itemName || itemName.startsWith("Total") || itemName.toLowerCase().includes("tracking")) continue; for (const [indexStr, branchName] of Object.entries(branchIndices)) { const index = parseInt(indexStr); const qtyStr = (row[index] || "0").trim().replace(/^"|"$/g, ''); const qty = parseInt(qtyStr); if (!isNaN(qty) && qty > 0) { parsedData.push({ branch: branchName,  branchKey: normalizeBranchKey(branchName), category: categoryName, item: itemName, qty: qty, id: `${branchName}_${itemName}`.replace(/\s+/g, '_') }); } } }
         return parsedData;
     };
 
@@ -343,60 +264,54 @@ if (!branchSet.has(branch)) {
         return new Promise((resolve, reject) => {
             if (file.type.includes('video')) { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve(reader.result as string); reader.onerror = error => reject(error); return; }
             const reader = new FileReader(); reader.readAsDataURL(file);
-            reader.onload = (event) => {
-                const img = new Image(); if (event.target?.result) img.src = event.target.result as string;
-                img.onload = () => {
-                    const canvas: HTMLCanvasElement = document.createElement('canvas');
-                    const maxWidth = 1000; const scaleSize = maxWidth / img.width;
-                    const newWidth = (img.width > maxWidth) ? maxWidth : img.width;
-                    const newHeight = (img.width > maxWidth) ? (img.height * scaleSize) : img.height;
-                    canvas.width = newWidth; canvas.height = newHeight;
-                    const ctx = canvas.getContext('2d');
-                    if (ctx) { ctx.drawImage(img, 0, 0, newWidth, newHeight); resolve(canvas.toDataURL('image/jpeg', 0.7)); } else { reject(new Error("Cannot get canvas context")); }
-                }; img.onerror = (error) => reject(error);
-            }; reader.onerror = (error) => reject(error);
+            reader.onload = (event) => { const img = new Image(); if (event.target?.result) img.src = event.target.result as string; img.onload = () => { const canvas: HTMLCanvasElement = document.createElement('canvas'); const maxWidth = 1000; const scaleSize = maxWidth / img.width; const newWidth = (img.width > maxWidth) ? maxWidth : img.width; const newHeight = (img.width > maxWidth) ? (img.height * scaleSize) : img.height; canvas.width = newWidth; canvas.height = newHeight; const ctx = canvas.getContext('2d'); if (ctx) { ctx.drawImage(img, 0, 0, newWidth, newHeight); resolve(canvas.toDataURL('image/jpeg', 0.7)); } else { reject(new Error("Cannot get canvas context")); } }; img.onerror = (error) => reject(error); }; reader.onerror = (error) => reject(error);
         });
     };
 
-const filteredData = useMemo<InventoryItem[]>(() => {
+    const filteredData = useMemo<InventoryItem[]>(() => {
+        if (!selectedBranch) return [];
+        const branchKey = normalizeBranchKey(selectedBranch);
+        
+  
+        let data = database.filter(d => d.branchKey === branchKey);
+
+        const currentTrackingInfo = availableTrackings.find(t => t.number === selectedTrackingNo);
+        if (currentTrackingInfo) {
+            if (currentTrackingInfo.type === 'Equipment') {
+             
+                data = data.filter(d => d.category === 'Equipment-Order');
+            } else {
+             
+                data = data.filter(d => d.category !== 'Equipment-Order');
+            }
+        }
+
+  
+        if (selectedCategory !== 'all') { 
+            data = data.filter(d => d.category === selectedCategory); 
+        }
+
+      
+        if (searchTerm) { 
+            const lower = searchTerm.toLowerCase(); 
+            data = data.filter(d => d.item.toLowerCase().includes(lower)); 
+        }
+        return data;
+    }, [database, selectedBranch, selectedCategory, searchTerm, selectedTrackingNo, availableTrackings]);
+const branchOrders = useMemo(() => {
   if (!selectedBranch) return [];
 
-  let data = database.filter(d => {
+  const branchKey = normalizeBranchKey(selectedBranch);
 
-    if (d.category === 'Equipment-Order') {
-      return (
-        selectedCategory === 'Equipment-Order' ||
-        availableTrackings.some(t => t.type === 'Equipment')
-      );
-    }
-
-
-    return d.branchKey === normalizeBranchKey(selectedBranch);
-  });
-
-  if (selectedCategory !== 'all') {
-    data = data.filter(d => d.category === selectedCategory);
-  }
-
-  if (searchTerm) {
-    const lower = searchTerm.toLowerCase();
-    data = data.filter(d => d.item.toLowerCase().includes(lower));
-  }
-
-  return data;
-}, [
-  database,
-  selectedBranch,
-  selectedCategory,
-  searchTerm,
-  availableTrackings
-]);
-
-
-
-
-
-
+  return orders
+    .map(order => ({
+      ...order,
+      items: order.items.filter(
+        it => it.branchKey === branchKey
+      )
+    }))
+    .filter(order => order.items.length > 0);
+}, [orders, selectedBranch]);
 
     const currentTableData = useMemo(() => {
         const indexOfLastItem = currentPage * itemsPerPage; const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -419,6 +334,7 @@ const filteredData = useMemo<InventoryItem[]>(() => {
             return newState;
         });
     };
+    
     const isAllSelected = filteredData.length > 0 && filteredData.every(item => checkedItems[item.id]);
     const handleSelectAll = () => {
         if (!selectedDate) return alert('⚠️ Please specify the POP receipt date');
@@ -427,12 +343,7 @@ const filteredData = useMemo<InventoryItem[]>(() => {
         else { filteredData.forEach(item => { newCheckedState[item.id] = true; localStorage.setItem('pop_check_' + item.id, 'true'); }); }
         setCheckedItems(newCheckedState);
     };
-    const handleClearSelection = () => {
-        if (!confirm('Are you sure you want to clear all selections for this view?')) return;
-        const newCheckedState = { ...checkedItems };
-        filteredData.forEach(item => { delete newCheckedState[item.id]; localStorage.removeItem('pop_check_' + item.id); });
-        setCheckedItems(newCheckedState);
-    };
+ 
     const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
         const files = event.target.files; if (!files) return;
         const fileList = Array.from(files); const MAX_FILE_SIZE_MB = 20; const MAX_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024; 
@@ -448,6 +359,12 @@ const filteredData = useMemo<InventoryItem[]>(() => {
         if (!selectedBranch) return alert("Please select a branch"); 
         if (!selectedDate) return alert("Please select a date");
         
+        // --- Validation for Signature, Name and Role ---
+        if (!signerName.trim()) return alert("⚠️ Please enter your Name before submitting."); 
+        if (!signerRole) return alert("⚠️ Please select your Role (SM or ASM) before submitting."); 
+        if (!isAccepted) return alert("⚠️ You must check 'I Accept' to confirm.");
+        if (!hasSignature) return alert("⚠️ Please sign your signature.");
+
         const allBranchItems = database.filter(d => d.branch === selectedBranch);
         const itemsSnapshot: SnapshotItem[] = allBranchItems.map(item => ({ id: item.id, item: item.item, qty: item.qty, category: item.category, isChecked: !!checkedItems[item.id] }));
         const isAllMissing = itemsSnapshot.length > 0 && itemsSnapshot.every(item => !item.isChecked);
@@ -461,7 +378,9 @@ const filteredData = useMemo<InventoryItem[]>(() => {
 
         setIsSubmitting(true);
         try {
-          const mediaBase64 = await Promise.all(selectedFiles.map(file => compressImage(file)));
+            const mediaBase64 = await Promise.all(selectedFiles.map(file => compressImage(file)));
+            const signatureData = canvasRef.current ? canvasRef.current.toDataURL('image/png') : "";
+
             let finalNote = reportNote;
             if (isAllMissing) finalNote = reportNote;
             else if (!isMissing && !isDefectMode) finalNote = "Received All POP Items Successfully.";
@@ -469,11 +388,15 @@ const filteredData = useMemo<InventoryItem[]>(() => {
             const payload: SubmitPayload = { 
                 branch: selectedBranch, 
                 trackingNo: selectedTrackingNo || "-", 
+                category: selectedCategory,
                 date: selectedDate, 
                 note: finalNote, 
                 images: mediaBase64, 
                 missingItems: missingString, 
-                itemsSnapshot: itemsSnapshot 
+                itemsSnapshot: itemsSnapshot,
+                signerName: signerName, 
+                signerRole: signerRole, 
+                signatureImage: signatureData 
             };
 
             await fetch(SCRIPT_URL, {
@@ -489,11 +412,23 @@ const filteredData = useMemo<InventoryItem[]>(() => {
             alert(msg);
 
             setReportNote(''); setSelectedFiles([]); setIsDefectMode(false); setSelectedTrackingNo('');
+            // Reset Signature & Role
+            setSignerName(''); setSignerRole(''); setIsAccepted(false); clearSignature();
+            
             const newCheckedState = { ...checkedItems };
             allBranchItems.forEach(item => { delete newCheckedState[item.id]; localStorage.removeItem('pop_check_' + item.id); });
             setCheckedItems(newCheckedState);
         } catch (error) { console.error(error); alert("❌ Error sending data"); } finally { setIsSubmitting(false); }
     };
+    const loadOrders = async () => {
+  try {
+    const res = await fetch("https://script.google.com/a/macros/owndays.com/s/AKfycbyW_RFcXTrLXe4-NeJBkWb0t-Bj-L5Zu_SJF5Stgt95k-qcz2h39o6jeGwR_VxESvE/exec"); // doGet()
+    const json = await res.json();
+    setOrders(json);
+  } catch (err) {
+    console.error("Failed to load orders", err);
+  }
+};
 
     const isComplete = progress.isComplete;
     let reportClass = 'mode-incomplete'; let reportIcon = '📝'; let reportTitle = 'Report Issue / Missing POP'; let btnText = '🚀 Confirm and Submit Report';
@@ -509,7 +444,11 @@ const filteredData = useMemo<InventoryItem[]>(() => {
                     <button onClick={() => setMode('entry')} style={{ padding: '10px 20px', borderRadius: 30, border: 'none', background: mode === 'entry' ? '#4f46e5' : '#e2e8f0', color: mode === 'entry' ? 'white' : '#64748b', fontWeight: 600, cursor: 'pointer', boxShadow: mode === 'entry' ? '0 4px 6px -1px rgba(79, 70, 229, 0.2)' : 'none' }}> Check POP Order</button>
                     <button onClick={() => setMode('history')} style={{ padding: '10px 20px', borderRadius: 30, border: 'none', background: mode === 'history' ? '#4f46e5' : '#e2e8f0', color: mode === 'history' ? 'white' : '#64748b', fontWeight: 600, cursor: 'pointer', boxShadow: mode === 'history' ? '0 4px 6px -1px rgba(79, 70, 229, 0.2)' : 'none' }}>📜 History POP Receive</button>
                     <button onClick={() => { setMode('admin'); }} style={{ padding: '10px 20px', borderRadius: 30, border: 'none', background: mode === 'admin' ? '#ef4444' : '#e2e8f0', color: mode === 'admin' ? 'white' : '#64748b', fontWeight: 600, cursor: 'pointer', boxShadow: mode === 'admin' ? '0 4px 6px -1px rgba(239, 68, 68, 0.2)' : 'none' }}>🔐 Admin</button>
+                    <button onClick={() => setMode('order')} style={{ padding: '10px 20px', borderRadius: 30, border: 'none', background: mode === 'order' ? '#4f46e5' : '#e2e8f0', color: mode === 'order' ? 'white' : '#64748b', fontWeight: 600, cursor: 'pointer', boxShadow: mode === 'order' ? '0 4px 6px -1px rgba(79, 70, 229, 0.2)' : 'none' }}> 🛒 Order Equipment</button>
+                
                 </div>
+
+
             </header>
             <div className="status-wrapper">
                 {loadingStatus === 'loading' && <div className="loading-pill"><div className="dot"></div> Connecting...</div>} {loadingStatus === 'ready' && <div className="loading-pill ready">✅ Ready</div>} {loadingStatus === 'error' && <div className="loading-pill error">❌ Disconnect</div>}
@@ -533,6 +472,18 @@ const filteredData = useMemo<InventoryItem[]>(() => {
                         />
                     )}
 
+                {/* --- Display Order Panel --- */}
+                    {/* {mode === 'order' && (
+                        <OrderPanel
+                            branches={branches}
+                            scriptUrl={SCRIPT_URL}
+                            trackingMap={trackingMap}
+                            database={database}
+                       onClose={() => setMode('entry')} 
+                        />
+                    )} */}
+              
+
                     {/* --- Entry Panel --- */}
                     {mode === 'entry' && (
                         <>
@@ -546,7 +497,6 @@ const filteredData = useMemo<InventoryItem[]>(() => {
                                 </div>
                                 <div className="input-group">
                                     <label>2. Tracking No.</label>
-                                 
                                         <select value={selectedTrackingNo} onChange={handleTrackingChange}>
                                             <option value="">-- Select Tracking No --</option>
                                             {availableTrackings.map((t, idx) => (
@@ -555,7 +505,6 @@ const filteredData = useMemo<InventoryItem[]>(() => {
                                                 </option>
                                             ))}
                                         </select>
-                                
                                 </div>
                                 <div className="input-group">
                                     <label>3. Category</label>
@@ -577,8 +526,272 @@ const filteredData = useMemo<InventoryItem[]>(() => {
                                 </div>
                             </div>
 
-                            {selectedBranch && filteredData.length > 0 && (
-                                <><div className="progress-section"><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 5, color: 'var(--text-sub)' }}><span>Inspection Progress</span><span>{progress.count}/{progress.total} ({progress.percent}%)</span></div><div className="progress-container"><div className="progress-bar" style={{ width: `${progress.percent}%` }}></div></div></div><div className="result-card"><div className="result-header"><span className="branch-title">{selectedBranch}</span><span className="total-badge">Total {filteredData.length} items</span></div><div className="table-container"><table><thead><tr><th style={{ width: 50 }}>Category</th><th>Item</th><th style={{ width: 40, textAlign: 'center' }}>Qty</th><th style={{width:80, textAlign: 'center' }}><div style={{display:'flex', flexDirection:'column', alignItems:'center',gap:2}}><span style={{fontSize: '0.6rem'}}>Received</span><div style={{display:'flex', gap: 5}}><input type="checkbox" className="custom-checkbox header-checkbox" checked={isAllSelected} onChange={handleSelectAll} disabled={!selectedDate || filteredData.length === 0} title="Select All"/><button onClick={handleClearSelection} disabled={!selectedDate || filteredData.length === 0} style={{border:'none', background:'transparent', cursor:'pointer', fontSize:'12px'}} title="Clear Selection">❌</button></div></div></th></tr></thead><tbody>{currentTableData.map(row => { const isChecked = !!checkedItems[row.id]; return (<tr key={row.id} className={isChecked ? 'checked-row' : ''} onClick={() => handleToggleCheck(row.id)}><td><span style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#f1f5f9', borderRadius: 4, color: '#64748b' }}>{row.category.replace('RE-', '').replace('-POP', '')}</span></td><td className="item-name" style={{ color: '#334155', whiteSpace: 'normal', pointerEvents: 'none' }}>{searchTerm ? (<span>{row.item.split(new RegExp(`(${searchTerm})`, 'gi')).map((part, i) => part.toLowerCase() === searchTerm.toLowerCase() ? <span key={i} style={{background: '#fef08a'}}>{part}</span> : part)}</span>) : row.item}</td><td style={{ textAlign: 'center', pointerEvents: 'none' }}><span className="qty-pill">{row.qty}</span></td><td style={{ textAlign: 'center' }}><div style={{ display: 'flex', justifyContent: 'center' }}><input type="checkbox" className="custom-checkbox" checked={isChecked} readOnly style={{ pointerEvents: 'none' }} disabled={!selectedDate} /></div></td></tr>) })}</tbody></table></div>{totalPages > 1 && (<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 15, padding: '15px 0', borderTop: '1px solid #f1f5f9' }}><button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} style={{ padding: '8px 16px', border: '1px solid #cbd5e1', borderRadius: 6, background: currentPage === 1 ? '#f1f5f9' : 'white', color: currentPage === 1 ? '#94a3b8' : '#334155', cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}>Prev</button><span style={{ fontSize: '0.9rem', color: '#64748b' }}>Page <strong>{currentPage}</strong> of {totalPages}</span><button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} style={{ padding: '8px 16px', border: '1px solid #cbd5e1', borderRadius: 6, background: currentPage === totalPages ? '#f1f5f9' : 'white', color: currentPage === totalPages ? '#94a3b8' : '#334155', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}>Next</button></div>)}</div><div className={`report-section ${reportClass}`}><div className="report-header"><div><span style={{ marginRight: 8 }}>{reportIcon}</span><span>{reportTitle}</span></div>{(isComplete || isDefectMode) && (<button className={`defect-toggle-btn ${isDefectMode ? 'active' : ''}`} onClick={() => setIsDefectMode(!isDefectMode)}>{isDefectMode ? '↩️ Cancel Defect Report' : '⚠️ Found Defect?'}</button>)}</div><div className="report-grid">{(!isComplete || isDefectMode) && (<div><label style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: 5 }}>Issue Details</label><textarea rows={3} placeholder="Specify missing or damaged POP items..." value={reportNote} onChange={(e) => setReportNote(e.target.value)} /></div>)}<div><label style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: 5 }}>Attach Photo/Video (Required)</label><div className="upload-box"><input type="file" className="upload-input" accept="image/*,video/*" multiple onChange={handleFileSelect} /><div style={{ fontSize: 24, marginBottom: 5, color: '#fb923c' }}>📷 🎥</div><div style={{ color: '#f97316', fontSize: '0.85rem', fontWeight: 600, pointerEvents: 'none' }}>Tap to take photo/video or select files<br /><span style={{ color: 'red', fontSize: '0.7rem' }}>(Max 10 files)</span></div></div><div className="preview-grid">{selectedFiles.map((file, index) => { const url = URL.createObjectURL(file); return (<div key={index} className="preview-item">{file.type.startsWith('video/') ? <video src={url} className="preview-media" controls /> : <img src={url} alt="preview" className="preview-media" />}<div className="delete-btn" onClick={() => removeFile(index)}>×</div></div>) })}</div></div><button className="btn-submit" onClick={handleSubmit}>{btnText}</button></div></div></>
+                           {selectedBranch && branchOrders.length > 0 && (
+  <div className="result-card" style={{ marginTop: 20 }}>
+    <div className="result-header">
+      <span className="branch-title">📦 Order ของสาขานี้</span>
+      <span className="total-badge">
+        {branchOrders.length} Orders
+      </span>
+    </div>
+
+    {branchOrders.map(order => (
+      <div
+        key={order.orderNo}
+        style={{
+          marginBottom: 15,
+          padding: 12,
+          border: "1px solid #e5e7eb",
+          borderRadius: 8,
+          background: "#fff"
+        }}
+      >
+        <div style={{ fontSize: "0.85rem", marginBottom: 8 }}>
+          <strong>Order No:</strong> {order.orderNo}<br />
+          <strong>Date:</strong> {order.orderDate}<br />
+          <strong>Tracking:</strong> {order.trackingNo}
+        </div>
+
+        <table style={{ width: "100%", fontSize: "0.8rem" }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left" }}>Category</th>
+              <th style={{ textAlign: "left" }}>Item</th>
+              <th style={{ textAlign: "center" }}>Qty</th>
+            </tr>
+          </thead>
+          <tbody>
+            {order.items.map((it, idx) => (
+              <tr key={idx}>
+                <td>{it.category}</td>
+                <td>{it.item}</td>
+                <td style={{ textAlign: "center" }}>{it.qty}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ))}
+  </div>
+)}
+
+{selectedBranch && filteredData.length > 0 && (
+                                <><div className="progress-section">
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 5, color: 'var(--text-sub)' }}>
+                                        <span>Inspection Progress</span>
+                                        <span>{progress.count}/{progress.total} ({progress.percent}%)</span></div>
+                                        <div className="progress-container"><div className="progress-bar" style={{ width: `${progress.percent}%` }}>
+                                            </div>
+                                            </div>
+                                            </div>
+                                            <div className="result-card">
+                                                <div className="result-header">
+                                                    <span className="branch-title">{selectedBranch}</span>
+                                                    <span className="total-badge">Total {filteredData.length} items</span>
+                                                    </div>
+                                                    <div className="table-container">
+                                                        <table>
+                                                            <thead>
+                                                                <tr>
+                                                                    <th style={{ width: 50 }}>Category</th>
+                                                                    <th>Item</th>
+                                                                    <th style={{ width: 40, textAlign: 'center' }}>Qty</th>
+                                                                    <th style={{width:80, textAlign: 'center' }}>
+                                                                        <div style={{display:'flex', flexDirection:'column', alignItems:'center',gap:2}}>
+                                                                            <span style={{fontSize: '0.6rem'}}>Received</span>
+                                                                            <div style={{display:'flex', gap: 5}}>
+                                                                                <input type="checkbox" className="custom-checkbox header-checkbox" checked={isAllSelected} onChange={handleSelectAll} disabled={!selectedDate || filteredData.length === 0} title="Select All"/>
+                                                     </div></div></th></tr></thead><tbody>{currentTableData.map(row => { const isChecked = !!checkedItems[row.id]; return (<tr key={row.id} className={isChecked ? 'checked-row' : ''} onClick={() => handleToggleCheck(row.id)}><td><span style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#f1f5f9', borderRadius: 4, color: '#64748b' }}>{row.category.replace('RE-', '').replace('-POP', '')}</span></td><td className="item-name" style={{ color: '#334155', whiteSpace: 'normal', pointerEvents: 'none' }}>{searchTerm ? (<span>{row.item.split(new RegExp(`(${searchTerm})`, 'gi')).map((part, i) => part.toLowerCase() === searchTerm.toLowerCase() ? <span key={i} style={{background: '#fef08a'}}>{part}</span> : part)}</span>) : row.item}</td><td style={{ textAlign: 'center', pointerEvents: 'none' }}><span className="qty-pill">{row.qty}</span></td><td style={{ textAlign: 'center' }}><div style={{ display: 'flex', justifyContent: 'center' }}><input type="checkbox" className="custom-checkbox" checked={isChecked} readOnly style={{ pointerEvents: 'none' }} disabled={!selectedDate} /></div></td></tr>) })}</tbody></table></div>{totalPages > 1 && (<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 15, padding: '15px 0', borderTop: '1px solid #f1f5f9' }}><button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} style={{ padding: '8px 16px', border: '1px solid #cbd5e1', borderRadius: 6, background: currentPage === 1 ? '#f1f5f9' : 'white', color: currentPage === 1 ? '#94a3b8' : '#334155', cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}>Prev</button><span style={{ fontSize: '0.9rem', color: '#64748b' }}>Page <strong>{currentPage}</strong> of {totalPages}</span><button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} style={{ padding: '8px 16px', border: '1px solid #cbd5e1', borderRadius: 6, background: currentPage === totalPages ? '#f1f5f9' : 'white', color: currentPage === totalPages ? '#94a3b8' : '#334155', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}>Next</button></div>)}</div>
+                                            
+                                            {/* REPORT SECTION & SIGNATURE */}
+                                            <div className={`report-section ${reportClass}`}>
+                                                <div className="report-header">
+                                                    <div><span style={{ marginRight: 8 }}>{reportIcon}</span><span>{reportTitle}</span></div>
+                                                    {(isComplete || isDefectMode) && (<button className={`defect-toggle-btn ${isDefectMode ? 'active' : ''}`} onClick={() => setIsDefectMode(!isDefectMode)}>{isDefectMode ? '↩️ Cancel Defect Report' : '⚠️ Found Defect?'}</button>)}
+                                                </div>
+                                                <div className="report-grid">
+                                                    {(!isComplete || isDefectMode) && (<div><label style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: 5 }}>Issue Details</label><textarea rows={3} placeholder="Specify missing or damaged POP items..." value={reportNote} onChange={(e) => setReportNote(e.target.value)} /></div>)}
+                                                    <div>
+                                                        <label style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: 5 }}>Attach Photo and Video (Required)</label>
+                                                        <div className="upload-box">
+                                                            <input type="file" className="upload-input" accept="image/*,video/*" multiple onChange={handleFileSelect} />
+                                                            <div style={{ fontSize: 24, marginBottom: 5, color: '#fb923c' }}>📷 🎥</div>
+                                                            <div style={{ color: '#f97316', fontSize: '0.85rem', fontWeight: 600, pointerEvents: 'none' }}>Tap to take photo and video or select files<br /><span style={{ color: 'red', fontSize: '0.7rem' }}>(Max 10 files)</span></div>
+                                                        </div>
+                                                        <div className="preview-grid">{selectedFiles.map((file, index) => { const url = URL.createObjectURL(file); return (<div key={index} className="preview-item">{file.type.startsWith('video/') ? <video src={url} className="preview-media" controls /> : <img src={url} alt="preview" className="preview-media" />}<div className="delete-btn" onClick={() => removeFile(index)}>×</div></div>) })}</div>
+                                                    </div>
+
+                                                  {/* --- SIGN OFF SECTION (UPDATED UI) --- */}
+<div className="sign-off-section" style={{ 
+    marginTop: 30, 
+    background: '#ffffff', 
+    borderRadius: 12, 
+    border: '1px solid #e2e8f0', 
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+    padding: '20px',
+    overflow: 'hidden'
+}}>
+    <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        marginBottom: 20, 
+        borderBottom: '1px solid #f1f5f9', 
+        paddingBottom: 15 
+    }}>
+        <span style={{ fontSize: '1.5rem', marginRight: 10 }}>✍️</span>
+        <div>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', margin: 0 }}>Signature</h3>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>For Shop Manager / Assistant only</span>
+        </div>
+    </div>
+
+    {/* Row: Name & Role */}
+    <div className="sign-off-row" style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 20 }}>
+        {/* 1. Name Input */}
+        <div style={{ flex: 1, minWidth: '200px' }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+                Signer Name <span style={{color: '#ef4444'}}>*</span>
+            </label>
+            <input 
+                type="text" 
+                placeholder="Firstname - Lastname"
+                value={signerName}
+                onChange={(e) => setSignerName(e.target.value)}
+                style={{ 
+                    width: '100%', 
+                    padding: '10px 12px', 
+                    borderRadius: 8, 
+                    border: '1px solid #cbd5e1', 
+                    fontSize: '0.95rem',
+                    outline: 'none',
+                    transition: 'border-color 0.2s',
+                    backgroundColor: '#f8fafc'
+                }}
+                onFocus={(e) => e.target.style.borderColor = '#4f46e5'}
+                onBlur={(e) => e.target.style.borderColor = '#cbd5e1'}
+            />
+        </div>
+
+        {/* 2. Role Selection */}
+        <div style={{ flex: '0 0 auto', minWidth: '150px' }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+                Role <span style={{color: '#ef4444'}}>*</span>
+            </label>
+            <select 
+                value={signerRole} 
+                onChange={(e) => setSignerRole(e.target.value)}
+                style={{ 
+                    width: '100%', 
+                    padding: '10px 12px', 
+                    borderRadius: 8, 
+                    border: '1px solid #cbd5e1', 
+                    fontSize: '0.95rem',
+                    backgroundColor: '#fff',
+                    cursor: 'pointer'
+                }}
+            >
+                <option value="">-- Select --</option>
+                <option value="Shop Manager">Shop Manager</option>
+                <option value="Assistant Shop Manager">Assistant Shop Manager</option>
+            </select>
+        </div>
+    </div>
+
+    {/* 3. Signature Pad */}
+    <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end', marginBottom: 6 }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
+                Signature <span style={{color: '#ef4444'}}>*</span>
+            </label>
+            <button 
+                onClick={clearSignature}
+                style={{ 
+                    fontSize: '0.75rem', 
+                    color: '#ef4444', 
+                    background: 'rgba(239, 68, 68, 0.1)', 
+                    border: 'none', 
+                    padding: '4px 10px',
+                    borderRadius: 4,
+                    cursor: 'pointer', 
+                    fontWeight: 600
+                }}
+            >
+                🗑️ Clear
+            </button>
+        </div>
+        
+        <div style={{ 
+            border: '2px dashed #cbd5e1', 
+            borderRadius: 12, 
+            overflow: 'hidden', 
+            background: '#fff', 
+            touchAction: 'none',
+            position: 'relative'
+        }}>
+            {!hasSignature && (
+                <div style={{
+                    position: 'absolute',
+                    top: '50%', left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    color: '#e2e8f0',
+                    fontSize: '1.5rem',
+                    fontWeight: 600,
+                    pointerEvents: 'none',
+                    userSelect: 'none'
+                }}>
+                    Sign Here
+                </div>
+            )}
+            <canvas 
+                ref={canvasRef}
+                width={300}
+                height={150}
+                style={{ width: '100%', height: '150px', display: 'block', cursor: 'crosshair' }}
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
+                onMouseUp={endDrawing}
+                onMouseLeave={endDrawing}
+                onTouchStart={startDrawing}
+                onTouchMove={draw}
+                onTouchEnd={endDrawing}
+            />
+        </div>
+    </div>
+
+    {/* 4. Acknowledgement Checkbox */}
+    <div style={{ 
+        display: 'flex', 
+        alignItems: 'flex-start', 
+        gap: 12, 
+        background: isAccepted ? '#eff6ff' : '#f8fafc', 
+        border: isAccepted ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+        padding: '12px 15px', 
+        borderRadius: 8,
+        transition: 'all 0.2s'
+    }}>
+        <input 
+            type="checkbox" 
+            id="acceptCheck" 
+            checked={isAccepted} 
+            onChange={(e) => setIsAccepted(e.target.checked)}
+            style={{ 
+                width: 20, 
+                height: 20, 
+                cursor: 'pointer',
+                marginTop: 2,
+                accentColor: '#4f46e5'
+            }}
+        />
+        <label htmlFor="acceptCheck" style={{ fontSize: '0.85rem', color: '#475569', cursor: 'pointer', lineHeight: 1.4 }}>
+            <strong style={{color: '#1e293b'}}>I Accept & Confirm:</strong> All checked items have been received correctly. 
+        </label>
+    </div>
+</div>
+{/* --- END SIGN OFF SECTION --- */}
+                                                    <button className="btn-submit" onClick={handleSubmit} disabled={isSubmitting}>{btnText}</button>
+                                                </div>
+                                            </div>
+                                </>
                             )}
                             {selectedBranch && filteredData.length === 0 && (<div className="empty-state"><span>📭</span><p>No POP items found for this branch</p></div>)}
                             {!selectedBranch && (<div className="empty-state"><span>👈</span><p>Select a branch to start checking POP</p></div>)}
@@ -587,7 +800,7 @@ const filteredData = useMemo<InventoryItem[]>(() => {
                 </>
             )}
             
-            <div style={{ textAlign: 'center', marginTop: 30, fontSize: '0.75rem', color: '#94a3b8' }}>* Data will be saved to Google Sheet</div>
+            <div style={{ textAlign: 'center', marginTop: 30, fontSize: '0.75rem', color: '#94a3b8' }}>* Data will be saved to Google Sheet & Drive</div>
         </div>
     );
 };

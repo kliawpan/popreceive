@@ -1127,3 +1127,21 @@ td:last-child {
     color: #94a3b8;
     margin-top: 5px;
 }
+
+
+.tab {
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  cursor: pointer;
+}
+
+.tab-active {
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: none;
+  background: #4f46e5;
+  color: white;
+  font-weight: 600;
+}
