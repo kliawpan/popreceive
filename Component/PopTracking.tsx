@@ -73,7 +73,7 @@ const SkeletonLoader = () => {
 
 const PopTracking: React.FC = () => {
   
-    const [database, setDatabase] = useState<InventoryItem[]>([]);
+    // const [database, setDatabase] = useState<InventoryItem[]>([]);
     const [branches, setBranches] = useState<string[]>([]);
     // const [trackingMap, setTrackingMap] = useState<Record<string, TrackingInfo[]>>({}); 
     const [loadingStatus, setLoadingStatus] = useState<LoadingStatus>('loading');
@@ -149,7 +149,7 @@ const [orders, setOrders] = useState<OrderData[]>([]);
                 // const parsedTrackingMap = parseTrackingCSV(trackingData, allBranches);
                 const sortedBranches = Array.from(allBranches).sort().filter(b => b.length > 2 && !b.includes("Total") && !b.includes("POP"));
                 
-                setDatabase(allData); 
+                // setDatabase(allData); 
                 setBranches(sortedBranches); 
                 // setTrackingMap(parsedTrackingMap);
                 setLoadingStatus('ready');
@@ -391,7 +391,9 @@ const filteredData = useMemo<InventoryItem[]>(() => {
 const handleSubmit = async () => {
   if (!selectedBranch) return alert("Please select a branch"); 
   if (!selectedDate) return alert("Please select a date");
-
+if (selectedFiles.length === 0) {
+            return alert("⚠️ Please attach at least one photo or video as evidence of receipt.");
+        }
   if (!signerName.trim()) return alert("⚠️ Please enter your Name.");
   if (!signerRole) return alert("⚠️ Please select your Role.");
   if (!isAccepted) return alert("⚠️ You must accept the confirmation.");
@@ -441,7 +443,7 @@ const orderNosInTracking = Array.from(new Set(
         orderNo: orderNosInTracking || "-",
       category: selectedCategory,
       date: selectedDate,
-      note: reportNote || "Received",
+      note: reportNote || "Received All Items",
       images: mediaBase64,
       missingItems: missingString,
       itemsSnapshot,
@@ -457,7 +459,7 @@ const orderNosInTracking = Array.from(new Set(
       body: JSON.stringify(payload)
     });
 
-    alert("✅ บันทึกข้อมูลเรียบร้อย");
+    alert("✅ Report successfully.");
     setSelectedTrackingNo("");
     setCheckedItems({});
     clearSignature();
@@ -895,9 +897,9 @@ const pendingOrders = useMemo(() => {
                                                         </div>
                                                         <div className="preview-grid">{selectedFiles.map((file, index) => { const url = URL.createObjectURL(file); return (<div key={index} className="preview-item">{file.type.startsWith('video/') ? <video src={url} className="preview-media" controls /> : <img src={url} alt="preview" className="preview-media" />}<div className="delete-btn" onClick={() => removeFile(index)}>×</div></div>) })}</div>
                                                     
-                                                      <button className="btn-submit" onClick={handleSubmit} disabled={isSubmitting}>
+                                                   {/*   <button className="btn-submit" onClick={handleSubmit} disabled={isSubmitting}>
         {btnText}
-      </button>
+      </button> */}
                                                     </div>
 
                                                   {/* --- SIGN OFF SECTION (UPDATED UI) --- */}
