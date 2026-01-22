@@ -292,39 +292,59 @@ const handleTrackingChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         });
     };
 
-    const filteredData = useMemo<InventoryItem[]>(() => {
-        if (!selectedBranch) return [];
-        const branchKey = normalizeBranchKey(selectedBranch);
+    // const filteredData = useMemo<InventoryItem[]>(() => {
+    //     if (!selectedBranch) return [];
+    //     const branchKey = normalizeBranchKey(selectedBranch);
         
   
-        let data = database.filter(d => d.branchKey === branchKey);
+    //     let data = database.filter(d => d.branchKey === branchKey);
 
     
-        if (selectedCategory !== 'all') { 
-            data = data.filter(d => d.category === selectedCategory); 
-        }
+    //     if (selectedCategory !== 'all') { 
+    //         data = data.filter(d => d.category === selectedCategory); 
+    //     }
 
       
-        if (searchTerm) { 
-            const lower = searchTerm.toLowerCase(); 
-            data = data.filter(d => d.item.toLowerCase().includes(lower)); 
-        }
-        return data;
-    }, [database, selectedBranch, selectedCategory, searchTerm, selectedTrackingNo, availableTrackings]);
-// const branchOrders = useMemo(() => {
-//   if (!selectedBranch) return [];
+    //     if (searchTerm) { 
+    //         const lower = searchTerm.toLowerCase(); 
+    //         data = data.filter(d => d.item.toLowerCase().includes(lower)); 
+    //     }
+    //     return data;
+    // }, [database, selectedBranch, selectedCategory, searchTerm, selectedTrackingNo, availableTrackings]);
 
-//   const branchKey = normalizeBranchKey(selectedBranch);
 
-//   return orders
-//     .map(order => ({
-//       ...order,
-//       items: order.items.filter(
-//         it => it.branchKey === branchKey
-//       )
-//     }))
-//     .filter(order => order.items.length > 0);
-// }, [orders, selectedBranch]);
+const filteredData = useMemo<InventoryItem[]>(() => {
+    if (!selectedBranch || !selectedTrackingNo || isPendingTracking) return [];
+    
+    const branchKey = normalizeBranchKey(selectedBranch);
+
+    // 1. หา Order ทั้งหมดที่ตรงกับเลข Tracking นี้
+    const matchedOrders = orders.filter(o => o.trackingNo === selectedTrackingNo);
+    
+    // 2. ดึงรายการ Items จากออเดอร์เหล่านั้นมาทำเป็น InventoryItem
+    const itemsFromOrder: InventoryItem[] = matchedOrders.flatMap(order => 
+        order.items
+            .filter(it => it.branchKey === branchKey)
+            .map(it => ({
+                // สร้าง ID ชั่วคราวสำหรับการทำ Checklist
+                id: `${order.orderNo}_${it.item}`.replace(/\s+/g, '_'),
+                branch: it.branch,
+                branchKey: it.branchKey,
+                category: it.category,
+                item: it.item,
+                qty: it.qty
+            }))
+    );
+
+    // 3. กรองด้วย Search Term (ถ้ามี)
+    if (searchTerm) {
+        const lower = searchTerm.toLowerCase();
+        return itemsFromOrder.filter(d => d.item.toLowerCase().includes(lower));
+    }
+
+    return itemsFromOrder;
+}, [orders, selectedBranch, selectedTrackingNo, isPendingTracking, searchTerm]);
+
 
     const currentTableData = useMemo(() => {
         const indexOfLastItem = currentPage * itemsPerPage; const indexOfFirstItem = indexOfLastItem - itemsPerPage;
