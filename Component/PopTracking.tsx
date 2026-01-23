@@ -49,7 +49,7 @@ interface SubmitPayload {
 type LoadingStatus = 'loading' | 'ready' | 'error';
 type AppMode = 'entry' | 'history' | 'admin';
 
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzVkmDVxjYHX89CViQUsrfPVU7K8Kc8XMK-KoWHcjz4qsC4KnW3DQHcWxqzeQ1r654K/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzxNY0qY5ZrJAsHVcA4DLSngW2NoGKiAlvsQbWc7uS8cszhiHqrboz1n5HvxBM_qg28/exec";
 
 const SHEET_URLS = {
     brand: "https://docs.google.com/spreadsheets/d/1f4jzIQd2wdIAMclsY4vRw04SScm5xUYN0bdOz8Rn4Pk/export?format=csv&gid=577319442",
@@ -664,50 +664,7 @@ const pendingOrders = useMemo(() => {
 
       if (!branchOrders.length) return null;
 
-    //   return (
-    //     <div key={tracking} className="result-card" style={{ marginTop: 20 }}>
-    //       <div className="result-header">
-    //         <strong>
-    //           🚚 Tracking:{" "}
-    //           {tracking === "PENDING"
-    //             ? "PENDING"
-    //             : tracking}
-    //         </strong>
-    //       </div>
-
-    //       {/* {branchOrders.map(order => (
-    //         <table
-    //           key={order.orderNo}
-    //           style={{ width: "100%", fontSize: "0.85rem" }}
-    //         >
-    //           <thead>
-    //             <tr>
-    //               <th>Category</th>
-    //               <th>Item</th>
-    //               <th style={{ textAlign: "center" }}>Qty</th>
-    //             </tr>
-    //           </thead>
-    //           <tbody>
-    //             {order.items
-    //               .filter(
-    //                 it =>
-    //                   it.branchKey ===
-    //                   normalizeBranchKey(selectedBranch)
-    //               )
-    //               .map((it, idx) => (
-    //                 <tr key={idx}>
-    //                   <td>{it.category}</td>
-    //                   <td>{it.item}</td>
-    //                   <td style={{ textAlign: "center" }}>
-    //                     {it.qty}
-    //                   </td>
-    //                 </tr>
-    //               ))}
-    //           </tbody>
-    //         </table>
-    //       ))} */}
-    //     </div>
-    //   );
+    //
     })}
 {selectedBranch && isPendingTracking && pendingOrders.length > 0 && (
   <>
@@ -757,11 +714,12 @@ const pendingOrders = useMemo(() => {
             gap: 12,
             fontSize: '0.85rem',
             marginTop: 15,
-            color: '#374151'
+            color: '#374151',
+             padding: '3px 8px',
           }}
         >
           <div>
-            <strong>Order No</strong>
+            <strong>Order Name</strong>
             <div>{order.orderNo}</div>
           </div>
           <div>
@@ -783,7 +741,9 @@ const pendingOrders = useMemo(() => {
               fontSize: '0.85rem',
               fontWeight: 600,
               marginBottom: 8,
-              color: '#374151'
+              color: '#374151',
+               padding: '3px 8px',
+
             }}
           >
             📋 Ordered Items
@@ -839,8 +799,7 @@ const pendingOrders = useMemo(() => {
             borderRadius: 8
           }}
         >
-          ℹ️ Items are shown for reference only.  
-          Checklist & confirmation will be available once POP is received.
+          ℹ️ The items shown are for reference only. Checklists and verification documents will be available once the tracking number is received.
         </div>
       </div>
     ))}
