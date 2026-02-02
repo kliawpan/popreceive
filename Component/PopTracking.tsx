@@ -88,7 +88,7 @@ const SkeletonLoader = () => {
 
 const PopTracking: React.FC = () => {
   
-    const [database, setDatabase] = useState<InventoryItem[]>([]);
+    // const [database, setDatabase] = useState<InventoryItem[]>([]);
     
     // ✅ เพิ่ม State ใหม่สำหรับเก็บ Size Map โดยเฉพาะ
     const [productSizeMap, setProductSizeMap] = useState<Map<string, string>>(new Map());
@@ -178,7 +178,7 @@ const PopTracking: React.FC = () => {
                         );
                     });
                 
-                setDatabase(allData); 
+                // setDatabase(allData); 
                 setBranches(sortedBranches); 
                 setProductSizeMap(tempSizeMap); // ✅ บันทึก Map ลง State
                 setLoadingStatus('ready');
@@ -582,17 +582,17 @@ const PopTracking: React.FC = () => {
       }
     };
 
-    const groupedOrdersByTracking = useMemo(() => {
-      const map: Record<string, OrderData[]> = {};
+    // const groupedOrdersByTracking = useMemo(() => {
+    //   const map: Record<string, OrderData[]> = {};
 
-      orders.forEach(order => {
-        const key = order.trackingNo || "PENDING";
-        if (!map[key]) map[key] = [];
-        map[key].push(order);
-      });
+    //   orders.forEach(order => {
+    //     const key = order.trackingNo || "PENDING";
+    //     if (!map[key]) map[key] = [];
+    //     map[key].push(order);
+    //   });
 
-      return map;
-    }, [orders]);
+    //   return map;
+    // }, [orders]);
 
     const pendingOrders = useMemo(() => {
       if (!selectedBranch || !isPendingTracking || !selectedCategoryType) return [];
