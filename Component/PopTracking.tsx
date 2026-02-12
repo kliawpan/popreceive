@@ -90,7 +90,7 @@ const PopTracking: React.FC = () => {
   
     // const [database, setDatabase] = useState<InventoryItem[]>([]);
     
-    // ✅ เพิ่ม State ใหม่สำหรับเก็บ Size Map โดยเฉพาะ
+
     const [productSizeMap, setProductSizeMap] = useState<Map<string, string>>(new Map());
 
     const [branches, setBranches] = useState<string[]>([]);
@@ -307,38 +307,34 @@ const PopTracking: React.FC = () => {
         
         if (headerIndex === -1) return [];
 
-        // 🟢 ตัวแปรสำหรับจำค่า Size ล่าสุด (ไว้แก้ปัญหา Merge Cell)
+   
         let lastSize = ""; 
 
-        // 2. วนลูปข้อมูล (เริ่มหลัง Header)
+     
         for (let i = headerIndex + 1; i < lines.length; i++) { 
             const row = lines[i].split(','); 
             if (row.length < 5) continue; 
-            
-            // อ่านค่าดิบจาก CSV
+       
             let rawSize = (row[0] || "").trim().replace(/^"|"$/g, ''); 
             const rawItem = (row[1] || "").trim().replace(/^"|"$/g, ''); 
 
-            // 🟢 Logic เติมเต็ม Size
             if (rawSize !== "") {
-                lastSize = rawSize; // ถ้ามีค่า อัปเดตตัวจำ
+                lastSize = rawSize; 
             } else {
-                rawSize = lastSize; // ถ้าว่าง ให้ใช้ค่าเดิมที่จำไว้
+                rawSize = lastSize; 
             }
 
-            // ถ้าไม่มีชื่อ Item ให้ใช้ Size แทน
             const itemName = rawItem || rawSize; 
-            const itemSize = rawSize; // ตอนนี้ทุกบรรทัดจะมี Size แล้ว
+            const itemSize = rawSize; 
 
-            // ข้ามบรรทัด Header ย่อย หรือ Total
+        
             if (!itemName || itemName.startsWith("Total") || itemName.toLowerCase().includes("tracking")) continue; 
             
-            // ✅ บันทึก Size ลง Map ทันที (เพื่อให้ filteredData เรียกใช้ได้ แม้สินค้าจะไม่มี Qty)
-            // ใช้ Key เป็น "Category|ItemName" เพื่อความชัวร์
+   
             const uniqueKey = `${categoryName}|${itemName.toLowerCase().replace(/\s+/g, "")}`;
             sizeMap.set(uniqueKey, itemSize);
 
-            // บันทึกแบบชื่อล้วนด้วย (Backup)
+          
             sizeMap.set(itemName.toLowerCase().replace(/\s+/g, ""), itemSize);
 
             for (const [indexStr, branchName] of Object.entries(branchIndices)) { 
@@ -398,7 +394,7 @@ const PopTracking: React.FC = () => {
         });
     };
 
-    // ✅ 3. แก้ไข filteredData (ใช้ productSizeMap ดึง Size)
+    
     const filteredData = useMemo<InventoryItem[]>(() => {
         if (!selectedBranch || !selectedTrackingNo || isPendingTracking || !orders) return [];
         
@@ -409,11 +405,10 @@ const PopTracking: React.FC = () => {
             (order.items || [])
                 .filter(it => it.branchKey === branchKey)
                 .map(it => {
-                    // สร้าง key ค้นหา 2 แบบ (แบบเจาะจง Category และแบบชื่อล้วน)
+                   
                     const itemKeyName = it.item.toLowerCase().replace(/\s+/g, "");
                     const specificKey = `${it.category}|${itemKeyName}`;
-                    
-                    // 🔍 ดึง Size จาก Map
+                   
                     let currentSize = productSizeMap.get(specificKey) || productSizeMap.get(itemKeyName) || "-";
 
                     return {
@@ -422,7 +417,7 @@ const PopTracking: React.FC = () => {
                         branchKey: it.branchKey,
                         category: it.category,
                         item: it.item,
-                        size: currentSize, // ✅ Size ต้องมาแน่นอน
+                        size: currentSize, 
                         qty: it.qty
                     };
                 })
@@ -489,7 +484,15 @@ const PopTracking: React.FC = () => {
       if (!signerRole) return alert("⚠️ Please select your Role.");
       if (!isAccepted) return alert("⚠️ You must accept the confirmation.");
       if (!hasSignature) return alert("⚠️ Please sign your signature.");
-
+let successMessage = "✅ บันทึกการรับสินค้าเรียบร้อยแล้ว";
+  
+if (isDefectMode) {
+      successMessage = "⚠️ Defect report submitted. (Email notification sent to stakeholders.)";
+  } else if (!isComplete) {
+      successMessage = "📝 Missing items reported. (Email notification sent to stakeholders.)";
+  } else {
+      successMessage = "✅ All items verified. (No email notification required.)";
+  }
       const allItemsToSubmit = filteredData; 
 
       const itemsSnapshot: SnapshotItem[] = allItemsToSubmit.map(item => ({
@@ -519,20 +522,20 @@ const PopTracking: React.FC = () => {
                       .map(o => o.orderNo)
             )).join(", ");
             
-        const payload: SubmitPayload = {
-          branch: selectedBranch,
-          trackingNo: selectedTrackingNo || "PENDING",
-          orderNo: orderNosInTracking || "-",
-          category: selectedCategory,
-          date: selectedDate,
-          note: reportNote || "Received All Items",
-          images: mediaBase64,
-          missingItems: missingString,
-          itemsSnapshot,
-          signerName,
-          signerRole,
-          signatureImage: signatureData
-        };
+const payload: SubmitPayload = {
+      branch: selectedBranch,
+      trackingNo: selectedTrackingNo || "PENDING",
+      orderNo: orderNosInTracking || "-",
+      category: selectedCategory,
+      date: selectedDate,
+      note: reportNote || (isComplete ? "Received All Items" : "Missing Items Reported"),
+      images: mediaBase64,
+      missingItems: missingString,
+      itemsSnapshot,
+      signerName,
+      signerRole,
+      signatureImage: signatureData
+    };
 
         await fetch(SCRIPT_URL, {
           method: "POST",
@@ -541,7 +544,7 @@ const PopTracking: React.FC = () => {
           body: JSON.stringify(payload)
         });
 
-        alert("✅ Report successfully.");
+      alert(successMessage);
         setSelectedTrackingNo("");
         setCheckedItems({});
         clearSignature();
@@ -770,7 +773,7 @@ const PopTracking: React.FC = () => {
                                                     {currentTableData.map(row => { const isChecked = !!checkedItems[row.id]; return (<tr key={row.id} className={isChecked ? 'checked-row' : ''} onClick={() => handleToggleCheck(row.id)}>
                                                         <td><span style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#f1f5f9', borderRadius: 4, color: '#64748b' }}>{row.category.replace('RE-', '').replace('-POP', '')}</span></td>
                                                         
-                                                        {/* ✅ 8. แสดงข้อมูล Size */}
+                                                      
                                                         <td><span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 500 }}>{row.size || "-"}</span></td>
 
                                                         <td className="item-name" style={{ color: '#334155', whiteSpace: 'normal', pointerEvents: 'none' }}>{searchTerm ? (<span>{row.item.split(new RegExp(`(${searchTerm})`, 'gi')).map((part, i) => part.toLowerCase() === searchTerm.toLowerCase() ? <span key={i} style={{background: '#fef08a'}}>{part}</span> : part)}</span>) : row.item}</td>
