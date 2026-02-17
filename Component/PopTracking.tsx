@@ -393,44 +393,120 @@ const PopTracking: React.FC = () => {
             reader.onerror = (error) => reject(error);
         });
     };
+  const pendingOrders = useMemo(() => {
+      if (!selectedBranch || !isPendingTracking || !selectedCategoryType) return [];
 
-    
-    const filteredData = useMemo<InventoryItem[]>(() => {
-        if (!selectedBranch || !selectedTrackingNo || isPendingTracking || !orders) return [];
-        
-        const branchKey = normalizeBranchKey(selectedBranch);
-        const matchedOrders = orders.filter(o => o.trackingNo === selectedTrackingNo);
-        
-        const itemsFromOrder: InventoryItem[] = matchedOrders.flatMap(order => 
-            (order.items || [])
-                .filter(it => it.branchKey === branchKey)
-                .map(it => {
-                   
-                    const itemKeyName = it.item.toLowerCase().replace(/\s+/g, "");
-                    const specificKey = `${it.category}|${itemKeyName}`;
-                   
-                    let currentSize = productSizeMap.get(specificKey) || productSizeMap.get(itemKeyName) || "-";
+      const branchKey = normalizeBranchKey(selectedBranch);
 
-                    return {
-                        id: `${order.orderNo}_${it.item}`.replace(/\s+/g, '_'),
-                        branch: it.branch,
-                        branchKey: it.branchKey,
-                        category: it.category,
-                        item: it.item,
-                        size: currentSize, 
-                        qty: it.qty
-                    };
-                })
+      return orders.filter(order => {
+        if (order.trackingNo !== "PENDING") return false;
+
+        const branchItems = (order.items || []).filter(
+          it => it.branchKey === branchKey
         );
+        if (!branchItems.length) return false;
 
-        if (searchTerm) {
-            const lower = searchTerm.toLowerCase();
-            return itemsFromOrder.filter(d => d.item.toLowerCase().includes(lower) || d.size.toLowerCase().includes(lower));
-        }
+        return selectedCategoryType === "EQUIPMENT"
+          ? branchItems.some(it => it.category === "Equipment-Order")
+          : branchItems.some(it => it.category !== "Equipment-Order");
+      });
+    }, [orders, selectedBranch, isPendingTracking, selectedCategoryType]);
+    
+    // const filteredData = useMemo<InventoryItem[]>(() => {
+    //     if (!selectedBranch || !selectedTrackingNo || isPendingTracking || !orders) return [];
+        
+    //     const branchKey = normalizeBranchKey(selectedBranch);
+    //     const matchedOrders = orders.filter(o => o.trackingNo === selectedTrackingNo);
+        
+    //     const itemsFromOrder: InventoryItem[] = matchedOrders.flatMap(order => 
+    //         (order.items || [])
+    //             .filter(it => it.branchKey === branchKey)
+    //             .map(it => {
+                   
+    //                 const itemKeyName = it.item.toLowerCase().replace(/\s+/g, "");
+    //                 const specificKey = `${it.category}|${itemKeyName}`;
+                   
+    //                 let currentSize = productSizeMap.get(specificKey) || productSizeMap.get(itemKeyName) || "-";
 
-        return itemsFromOrder;
-    }, [orders, productSizeMap, selectedBranch, selectedTrackingNo, isPendingTracking, searchTerm]);
+    //                 return {
+    //                     id: `${order.orderNo}_${it.item}`.replace(/\s+/g, '_'),
+    //                     branch: it.branch,
+    //                     branchKey: it.branchKey,
+    //                     category: it.category,
+    //                     item: it.item,
+    //                     size: currentSize, 
+    //                     qty: it.qty
+    //                 };
+    //             })
+    //     );
 
+    //     if (searchTerm) {
+    //         const lower = searchTerm.toLowerCase();
+    //         return itemsFromOrder.filter(d => d.item.toLowerCase().includes(lower) || d.size.toLowerCase().includes(lower));
+    //     }
+
+    //     return itemsFromOrder;
+    // }, [orders, productSizeMap, selectedBranch, selectedTrackingNo, isPendingTracking, searchTerm]);
+const filteredData = useMemo<InventoryItem[]>(() => {
+    if (!selectedBranch || !selectedCategoryType || !orders) return [];
+    
+    const branchKey = normalizeBranchKey(selectedBranch);
+    let matchedOrders: OrderData[] = [];
+
+    if (isPendingTracking) {
+        matchedOrders = pendingOrders;
+    } else {
+        matchedOrders = orders.filter(o => o.trackingNo === selectedTrackingNo);
+    }
+    
+    const itemsFromOrder: InventoryItem[] = matchedOrders.flatMap(order => 
+        (order.items || [])
+            .filter(it => {
+                const currentItBranchKey = normalizeBranchKey(it.branch.replace("(Equipment)", ""));
+                const isMatchBranch = currentItBranchKey === branchKey;
+                
+                if (!isMatchBranch) return false;
+                const isEquipmentItem = 
+                    it.category === "Equipment-Order" || 
+                    it.branch.toLowerCase().includes("(Equipment)");
+
+                if (selectedCategoryType === "EQUIPMENT") {
+                    return isEquipmentItem;
+                } else {
+                    return !isEquipmentItem;
+                }
+            })
+            .map(it => {
+                const itemKeyName = it.item.toLowerCase().replace(/\s+/g, "");
+                const specificKey = `${it.category}|${itemKeyName}`;
+                let currentSize = productSizeMap.get(specificKey) || productSizeMap.get(itemKeyName) || it.size || "-";
+
+                return {
+                    id: `${order.orderNo}_${it.item}`.replace(/\s+/g, '_'),
+                    branch: it.branch,
+                    branchKey: normalizeBranchKey(it.branch),
+                    category: it.category,
+                    item: it.item,
+                    size: currentSize, 
+                    qty: it.qty
+                };
+            })
+    );
+let finalData = itemsFromOrder;
+    if (selectedCategory !== 'all') {
+        finalData = finalData.filter(d => d.category === selectedCategory);
+    }
+
+    if (searchTerm) {
+        const lower = searchTerm.toLowerCase();
+        return finalData.filter(d => 
+            d.item.toLowerCase().includes(lower) || 
+            (d.size && d.size.toLowerCase().includes(lower))
+        );
+    }
+
+return finalData;
+}, [orders, productSizeMap, selectedBranch, selectedTrackingNo, isPendingTracking, selectedCategory, searchTerm, pendingOrders, selectedCategoryType]);
 
     const currentTableData = useMemo(() => {
         const indexOfLastItem = currentPage * itemsPerPage; const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -559,7 +635,7 @@ const payload: SubmitPayload = {
     const loadOrders = async () => {
       try {
         const res = await fetch(
-          `https://script.google.com/macros/s/AKfycbw_qXZVBiT8OujOcsaxapjXbKofSmIPmm34CEZJy4o7Ei2tfu_8KykpyZWFVR4Dr1w/exec?action=getOrders&_t=${Date.now()}`
+          `https://script.google.com/macros/s/AKfycbxDXFSAN_fZrwHQAl05ta-ih7tlrhWgQNGXrtF45UnLA8vT5xVB6QLXKlKHY7OFFoQ/exec?action=getOrders&_t=${Date.now()}`
         );
 
         const json = await res.json();
@@ -597,24 +673,7 @@ const payload: SubmitPayload = {
     //   return map;
     // }, [orders]);
 
-    const pendingOrders = useMemo(() => {
-      if (!selectedBranch || !isPendingTracking || !selectedCategoryType) return [];
-
-      const branchKey = normalizeBranchKey(selectedBranch);
-
-      return orders.filter(order => {
-        if (order.trackingNo !== "PENDING") return false;
-
-        const branchItems = (order.items || []).filter(
-          it => it.branchKey === branchKey
-        );
-        if (!branchItems.length) return false;
-
-        return selectedCategoryType === "EQUIPMENT"
-          ? branchItems.some(it => it.category === "Equipment-Order")
-          : branchItems.some(it => it.category !== "Equipment-Order");
-      });
-    }, [orders, selectedBranch, isPendingTracking, selectedCategoryType]);
+  
 
     const isComplete = progress.isComplete;
     let reportClass = 'mode-incomplete'; let reportIcon = '📝'; let reportTitle = 'Report Issue / Missing POP'; let btnText = '🚀 Confirm and Submit Report';
